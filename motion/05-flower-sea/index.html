@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="Kvjwm2GSPgACatq5SeYBoe">
+<head data-page-node-id="06fFl5nxNi5ON5dYkzwlo0">
+<meta charset="UTF-8" data-page-node-id="M3UkOc9VcobHrMxhpBmVjv">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="vxKUw2G6ivVZRary7dqFJv">
+<title>彩色的时间长河 · 月上泪湖 — Tear Lake</title>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" data-page-node-id="gQ82OQEBPo2qQQoHrh7H0k">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin data-page-node-id="CmGr1S01sPXIlF8pEh55ch">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400&family=Cormorant+Garamond:ital@1&display=swap" rel="stylesheet" data-page-node-id="x8KcDs9yePeWn5VzPihWge">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width:100%; height:100%;
+    overflow:hidden;
+    background:#05070f;
+    cursor: crosshair;
+  }
+  canvas { display:block; }
+
+  /* ————— 左上角静态歌词（DOM 层，不参与动画） ————— */
+  #corner-lyrics {
+    position:fixed; left:min(58px,10vw); top:min(68px,8vh);
+    pointer-events:none; z-index:5;
+    font-family:"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+    font-weight:300; font-size:clamp(14px,2.4vmin,17px); line-height:2.4; /* 竖排时为列距 */
+    letter-spacing:.3em; padding-block-start:.3em; /* 平衡竖排末字字距 */
+    writing-mode:vertical-rl; /* 竖排：列自右向左 */
+    text-align:left;
+    color:transparent; /* 交给渐变填充 */
+    background:linear-gradient(to bottom right,
+      #ffd9a8 0%, #ff9ec7 32%, #b39ddb 62%, #8ecae6 100%);
+    -webkit-background-clip:text;
+    background-clip:text;
+    filter:drop-shadow(0 0 18px rgba(20,30,60,.9)) drop-shadow(0 1px 12px rgba(0,0,0,.6));
+    opacity:0;
+  }
+  #corner-lyrics .blank { color:#ffffff64; } /* “空白”二字保持纯白，覆盖渐变填充 */
+  /* ————— 左下角署名 ————— */
+  #caption {
+    position:fixed; left:min(42px,7vw); bottom:min(44px,5vh);
+    pointer-events:none; z-index:5;
+    font-family:"Cormorant Garamond","Noto Serif SC",serif;
+    font-style:italic; font-size:12px; letter-spacing:.12em;
+    color:rgba(232,228,218,.55);
+    opacity:0;
+  }
+</style>
+</head>
+<body data-page-node-id="71iPMwfo2Gz1D0cfTOepE8">
+<div id="corner-lyrics" data-page-node-id="ZoafNMXa2haUygnWhPZTPs"></div>
+<div id="caption" data-page-node-id="bvrQI1vAI0xDwWI0J28AOW"></div>
+<script>
+/* ═════════════ 可配置区（与 prompt.md 参数表一一对应） ═════════════ */
+const CONFIG = {
+  lyricSrc:
+    "彩色的时间染上空白是你流的泪晕开" +
+    "不要你离开距离隔不开思念变成海在窗外进不来" +
+    "原谅说太快爱成了阻碍",
+  bg: {
+    top: [10, 14, 33], horizon: [20, 28, 52], bot: [6, 8, 18],
+    horizonY: 0.56,                            // 地平线（比例×H）
+    mist: [120, 150, 200], mistA: 0.10,        // 地平线薄雾光带
+  },
+  lake: {
+    rows: 14, margin: 80,
+    fontNear: 18, fontFar: 8,                  // 字号近（湖底）→远（地平线）
+    gap: 10,
+    speed: [14, 42],                           // 行速 px/s 远→近（近快远慢）
+    rowExp: 1.45,                              // 行距透视指数
+    depthFade: 0.55,
+    flowWave: { amp: 3, k: 0.008, speed: 1.6 },
+    shimmer: { amp: 0.26, k: 0.02, speed: 2.0 },
+    flecks: { count: 40, life: [1.6, 3.6], len: [8, 30], a: 0.10 },
+    streaks: { count: 10, len: [40, 120], a: 0.08 },
+    moonRefl: { count: 34, a: 0.28 },          // 月光倒影碎闪（上窄下宽）
+    palette: [                                 // 行色带：远冷蓝 → 近暖金
+      [120, 185, 245], [105, 205, 230], [130, 222, 175], [150, 165, 240],
+      [190, 150, 225], [225, 140, 200], [245, 150, 130], [255, 205, 118],
+    ],
+    gray: [196, 202, 214],
+    dimAlpha: 0.42,
+  },
+  moon: {
+    x: 0.66, y: 0.235, r: 0.21,                // 圆心（比例）/ 半径（×W）
+    cut: 0.45, cutR: 0.98,                     // 切割圆上移量 / 半径（×r）
+    col: [245, 235, 205], haloA: 0.5,
+  },
+  girl: {
+    img: "girl-silhouette.png",
+    h: 2.25, dx: -0.05, seatK: 0.55,           // 图高=r×h（剪影实高≈0.51×图高）/ 横偏(×r) / 座高=圆心下 seatK×r
+    anchor: [0.62, 0.76],                      // 素材图中"臀部座点"的比例位置（对准月牙座点）
+    eye: [0.46, 0.43],                         // 眼睛在素材图中的比例位置
+    bob: 1.5,                                  // 呼吸浮动 px
+  },
+  tear: {
+    at: 2.0,                                   // 出现时刻
+    dwell: 0, slide: 1.5, fall: 1.2,           // ★ 三段时长：停留(0=不停留) / 滑落 / 坠落
+    impDepth: 0.42,                            // 落点湖深（horizon 下比例）
+    size: 5, color: [190, 225, 255],
+    stretch: 0.9, trail: 2,                    // 拉伸 / 拖尾（仅坠落段）
+  },
+  splash: { count: 8, speed: [50, 130], life: 0.6, size: [1.2, 2.4], gravity: 420 },
+  ripple: {
+    count: 5, gap: [0.22, 0.40],
+    speed: 130, life: 2.4,
+    squash: 0.3, wobble: 0.18,
+    push: 10, pushWidth: 55,
+  },
+  drain: { speed: 260, soft: 300, squash: 0.3 },
+  clock: {
+    r: 0.30, squash: 0.55,                     // ★ 沉钟半径（×W，受湖深钳制）/ 平躺透视压扁
+    col: [240, 216, 150], alpha: 0.5,          // 暖金微光 / 整体透明度（淹没感）
+    longRev: 1, shortRev: 1 / 12,              // 分针 / 时针每循环圈数
+    slowDur: 3.0,                              // 泪落钟心后指针停摆耗时
+    stir: 3, wobble: 0.7,                      // 指针搅动字符 px / 涟漪扫过折射晃动 px
+    interactR: 1.4, stutter: [0.7, 1.5],       // 交互影响半径（×clkR）/ 卡壳深度与时长
+  },
+  interact: { enable: true, maxR: 230, grow: 1.2, heal: [2.2, 5.0] },
+  corner: {
+    lines: ["彩色的时间染上空白", "是你流的泪晕开"],
+    fadeIn: [1.2, 3.0], fadeOutAt: 14.8,
+  },
+  caption: "《花海》 周杰伦",
+  ambience: { motes: 70, bokeh: 6 },
+  loop: { total: 16, fadeIn: 0.6, fadeOut: 1.2 },
+  seed: 20260830,
+};
+/* ══════════════════════════════════════════════════════════════════
+   六层结构：
+   1 底质层  夜空渐变 + 星尘 + 月牙与光晕 + 地平线薄雾 + 湖底渐变（离屏缓存）
+   2 生命层  失焦光斑
+   3 主体层  湖底沉钟（淹没感，泪落停摆）→ 月光倒影 → 流光线 → 碎纹 → 透视字符湖
+   4 剪影层  女孩素材（multiply 去白底）坐于月牙上
+   5 事件层  泪滴坠落 → 扁椭圆涟漪（湖面裁剪）→ 褪色前沿
+   6 质感层  胶片颗粒 + 呼吸暗角 + 首尾落幕纱幕
+   ══════════════════════════════════════════════════════════════════ */
+
+new p5((p) => {
+  const C = CONFIG, L = C.lake, CN = "'Noto Serif SC','Songti SC','STSong','SimSun',serif";
+  const BASE_FONT = 17;
+  let chars = [], rowsMeta = [], streaks = [], flecks = [], refls = [];
+  let ripples = [];        // {x,y,t0,speed,life,seed,w}
+  let splashes = [];
+  let iTears = [];         // 交互泪 {x,ty,t0,impacted}
+  let motes = [], bokehs = [];
+  let tG = 0;
+  let bgCache = null, grainA = null, grainB = null, vigCache = null;
+  let glowCyan = null, glowWarm = null;
+  let girlImg = null;
+  const glyphCache = new Map(); // ch|band → {col, gray, ox, oy}
+  const cornerEl = document.getElementById("corner-lyrics");
+  const captionEl = document.getElementById("caption");
+  const IMPACT_T = C.tear.at + C.tear.dwell + C.tear.slide + C.tear.fall; // 6.7
+  // 场景几何（build 时计算）
+  let horizonY = 0, moonX = 0, moonY = 0, moonR = 0;
+  let girlBX = 0, girlBY = 0, girlW = 0, girlH = 0;
+  let eyeX = 0, eyeY = 0, impX = 0, impY = 0;
+  // 泪滴路径（build 时计算）：颊线贝塞尔 P0→P1→P2 + 坠落物理参数
+  let slP0 = [0, 0], slP1 = [0, 0], slP2 = [0, 0];
+  let fallV0 = 0, fallG = 0, fallVX = 0;
+  // 湖底沉钟（build 时计算几何；走时为运行时状态）
+  let clkX = 0, clkY = 0, clkR = 100;
+  let effT = 0, prevTl = 0; // 有效走时（指针角度基准）/ 上帧循环时刻（检测重置）
+
+  const clamp01 = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
+  const sstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+  const lerp = (a, b, k) => a + (b - a) * k;
+
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  /* ———— 湖面行几何 ———— */
+  const rowK = (r) => Math.pow((r + 0.5) / L.rows, L.rowExp);   // 0(远)→1(近)
+  const rowY = (r) => horizonY + (p.height - horizonY) * rowK(r);
+  const rowFont = (r) => lerp(L.fontFar, L.fontNear, Math.pow(rowK(r), 0.9));
+
+  /* —— 径向光晕精灵 —— */
+  function glowSprite(color, rad) {
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = rad * 2;
+    const g = cv.getContext("2d");
+    const gr = g.createRadialGradient(rad, rad, 0, rad, rad, rad);
+    gr.addColorStop(0, `rgba(${color.join(",")},0.9)`);
+    gr.addColorStop(0.4, `rgba(${color.join(",")},0.35)`);
+    gr.addColorStop(1, `rgba(${color.join(",")},0)`);
+    g.fillStyle = gr;
+    g.fillRect(0, 0, rad * 2, rad * 2);
+    return cv;
+  }
+
+  /* —— 字形精灵：彩色 + 灰色两版（17px 基准，逐帧缩放） —— */
+  function glyph(ch, band) {
+    const key = ch + "|" + band;
+    let s = glyphCache.get(key);
+    if (s) return s;
+    const size = BASE_FONT, pad = 6;
+    const cv = document.createElement("canvas");
+    const g = cv.getContext("2d");
+    g.font = `300 ${size}px ${CN}`;
+    const w = Math.ceil(Math.max(g.measureText(ch).width, size)) + pad * 2;
+    const h = Math.ceil(size * 1.7) + pad * 2;
+    const mk = (color) => {
+      const c = document.createElement("canvas");
+      c.width = w; c.height = h;
+      const gg = c.getContext("2d");
+      gg.font = `300 ${size}px ${CN}`;
+      gg.textAlign = "center"; gg.textBaseline = "middle";
+      gg.fillStyle = "rgba(15,22,48,0.55)";
+      gg.fillText(ch, w / 2 + 1, h / 2 + 1.2);
+      gg.fillStyle = `rgb(${color.join(",")})`;
+      gg.fillText(ch, w / 2, h / 2);
+      return c;
+    };
+    s = { col: mk(L.palette[band]), gray: mk(L.gray), ox: w / 2, oy: h / 2, w, h };
+    glyphCache.set(key, s);
+    return s;
+  }
+
+  /* —— 背景离屏缓存：夜空 + 月牙 + 地平线薄雾 + 湖底 —— */
+  function buildBg() {
+    horizonY = C.bg.horizonY * p.height;
+    moonX = C.moon.x * p.width; moonY = C.moon.y * p.height; moonR = C.moon.r * p.width;
+    bgCache = document.createElement("canvas");
+    bgCache.width = Math.max(1, Math.round(p.width) || 1);
+    bgCache.height = Math.max(1, Math.round(p.height) || 1);
+    const g = bgCache.getContext("2d");
+    // 天空（上→地平线）
+    let gr = g.createLinearGradient(0, 0, 0, horizonY);
+    gr.addColorStop(0, `rgb(${C.bg.top.join(",")})`);
+    gr.addColorStop(1, `rgb(${C.bg.horizon.join(",")})`);
+    g.fillStyle = gr;
+    g.fillRect(0, 0, p.width, horizonY + 1);
+    // 湖底（地平线→画面底）
+    gr = g.createLinearGradient(0, horizonY, 0, p.height);
+    gr.addColorStop(0, `rgb(${C.bg.horizon.join(",")})`);
+    gr.addColorStop(0.18, `rgb(14,19,38)`);
+    gr.addColorStop(1, `rgb(${C.bg.bot.join(",")})`);
+    g.fillStyle = gr;
+    g.fillRect(0, horizonY, p.width, p.height - horizonY);
+
+    // 月牙光晕
+    const M = C.moon;
+    let hg = g.createRadialGradient(moonX, moonY, moonR * 0.4, moonX, moonY, moonR * 2.6);
+    hg.addColorStop(0, `rgba(${M.col.join(",")},${M.haloA * 0.5})`);
+    hg.addColorStop(0.5, `rgba(${M.col.join(",")},${M.haloA * 0.16})`);
+    hg.addColorStop(1, `rgba(${M.col.join(",")},0)`);
+    g.fillStyle = hg;
+    g.fillRect(moonX - moonR * 2.6, moonY - moonR * 2.6, moonR * 5.2, moonR * 5.2);
+    // 月牙本体：先画到独立画布（destination-out 挖切），再合成到背景
+    const mc2 = document.createElement("canvas");
+    mc2.width = mc2.height = Math.ceil(moonR * 2.4);
+    const mg2 = mc2.getContext("2d");
+    const cxm = mc2.width / 2;
+    mg2.beginPath();
+    mg2.arc(cxm, cxm, moonR, 0, Math.PI * 2);
+    const mgrad = mg2.createRadialGradient(cxm - moonR * 0.3, cxm - moonR * 0.3, moonR * 0.1,
+                                           cxm, cxm, moonR);
+    mgrad.addColorStop(0, "rgb(252,246,224)");
+    mgrad.addColorStop(1, `rgb(${M.col.join(",")})`);
+    mg2.fillStyle = mgrad;
+    mg2.fill();
+    mg2.globalCompositeOperation = "destination-out";
+    mg2.beginPath();
+    mg2.arc(cxm, cxm - M.cut * moonR, M.cutR * moonR, 0, Math.PI * 2);
+    mg2.fill();
+    g.drawImage(mc2, moonX - cxm, moonY - cxm);
+
+    // 地平线薄雾光带
+    const mc = C.bg.mist;
+    gr = g.createLinearGradient(0, horizonY - p.height * 0.03, 0, horizonY + p.height * 0.05);
+    gr.addColorStop(0, `rgba(${mc.join(",")},0)`);
+    gr.addColorStop(0.45, `rgba(${mc.join(",")},${C.bg.mistA})`);
+    gr.addColorStop(1, `rgba(${mc.join(",")},0)`);
+    g.fillStyle = gr;
+    g.fillRect(0, horizonY - p.height * 0.03, p.width, p.height * 0.08);
+  }
+
+  function buildGrain() {
+    const mk = () => {
+      const cv = document.createElement("canvas");
+      cv.width = Math.max(1, Math.round(p.width) || 1);
+      cv.height = Math.max(1, Math.round(p.height) || 1);
+      const g = cv.getContext("2d");
+      const img = g.createImageData(cv.width, cv.height);
+      for (let i = 0; i < img.data.length; i += 4) {
+        const v = (Math.random() * 255) | 0;
+        img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+        img.data[i + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+      return cv;
+    };
+    grainA = mk(); grainB = mk();
+  }
+
+  function buildVignette() {
+    vigCache = document.createElement("canvas");
+    vigCache.width = Math.max(1, Math.round(p.width) || 1);
+    vigCache.height = Math.max(1, Math.round(p.height) || 1);
+    const g = vigCache.getContext("2d");
+    const cx = p.width / 2, cy = p.height / 2;
+    const r = Math.hypot(cx, cy);
+    const gr = g.createRadialGradient(cx, cy, r * 0.45, cx, cy, r);
+    gr.addColorStop(0, "rgba(0,0,0,0)");
+    gr.addColorStop(1, "rgba(0,0,0,0.42)");
+    g.fillStyle = gr;
+    g.fillRect(0, 0, p.width, p.height);
+  }
+
+  /* —— 环境碎纹 —— */
+  function newFleck(rnd) {
+    const F = L.flecks, r = rnd || Math.random;
+    return {
+      x: r() * p.width,
+      y: horizonY + r() * (p.height - horizonY),
+      t0: tG + r() * 1.2, life: lerp(F.life[0], F.life[1], r()),
+      len: lerp(F.len[0], F.len[1], r()),
+      a0: r() * Math.PI * 2, span: 0.7 + r() * 1.1,
+    };
+  }
+
+  /* —— 布局：字符湖 + 流光线 + 碎纹 + 月光倒影 + 生命层 —— */
+  function build() {
+    const rnd = mulberry32(C.seed);
+    chars = []; rowsMeta = []; streaks = []; flecks = []; refls = []; glyphCache.clear();
+    const src = [...C.lyricSrc].filter((ch) => ch.trim() !== "");
+    // 行元数据 + 字符（按行排布，行内随机散布）
+    for (let r = 0; r < L.rows; r++) {
+      const k = rowK(r);
+      const font = rowFont(r);
+      const speed = lerp(L.speed[0], L.speed[1], k) * (0.92 + rnd() * 0.16);
+      const band = Math.round((r / (L.rows - 1)) * (L.palette.length - 1)); // 远冷→近暖
+      const step = font + L.gap;
+      const count = Math.ceil((p.width + L.margin * 2) / step) + 1;
+      rowsMeta.push({ y: rowY(r), font, speed, band, step,
+                      depthA: lerp(L.depthFade, 1, k) });
+      for (let j = 0; j < count; j++) {
+        chars.push({
+          ch: src[Math.floor(rnd() * src.length)],
+          row: r,
+          x0: j * step + (rnd() - 0.5) * step * 0.5,
+          ph: rnd() * Math.PI * 2,
+          sS: lerp(1.2, 2.2, rnd()),
+          aJ: 0.75 + rnd() * 0.25,
+        });
+      }
+    }
+    // 流光线（水平）
+    for (let i = 0; i < L.streaks.count; i++)
+      streaks.push({ x: rnd() * p.width, y: horizonY + rnd() * (p.height - horizonY),
+                     len: lerp(L.streaks.len[0], L.streaks.len[1], rnd()),
+                     sp: 20 + rnd() * 30, ph: rnd() * Math.PI * 2, w: 0.8 + rnd() * 0.9 });
+    // 环境碎纹
+    for (let i = 0; i < L.flecks.count; i++) flecks.push(newFleck(rnd));
+    // 月光倒影碎闪（上窄下宽的光路）
+    const MR = L.moonRefl;
+    for (let i = 0; i < MR.count; i++) {
+      const f = Math.pow(rnd(), 1.2); // 0(近地平线)→1(近湖底)
+      refls.push({ f, off: (rnd() * 2 - 1), len: lerp(6, 26, f) * (0.5 + rnd()),
+                   ph: rnd() * Math.PI * 2, sp: 1.5 + rnd() * 2 });
+    }
+    // 生命层：星尘（天空）+ 光斑
+    motes = []; bokehs = [];
+    for (let i = 0; i < C.ambience.motes; i++)
+      motes.push({ x: rnd() * p.width, y: rnd() * horizonY * 0.96, r: 0.5 + rnd() * 1.2,
+                   ph: rnd() * Math.PI * 2, sp: 0.2 + rnd() * 0.6 });
+    for (let i = 0; i < C.ambience.bokeh; i++)
+      bokehs.push({ x: rnd() * p.width, y: rnd() * p.height, r: 40 + rnd() * 90,
+                    ph: rnd() * Math.PI * 2, sp: 0.05 + rnd() * 0.1,
+                    warm: rnd() < 0.5, a: 0.04 + rnd() * 0.05 });
+    // 女孩几何：臀部座点对准月牙座点，面朝湖
+    const G = C.girl, M = C.moon;
+    girlH = moonR * G.h;
+    girlW = girlH * (1600 / 2848);
+    const seatX = moonX + G.dx * moonR;
+    const seatY = moonY + G.seatK * moonR;
+    girlBX = seatX - G.anchor[0] * girlW;
+    girlBY = seatY - G.anchor[1] * girlH;
+    eyeX = girlBX + G.eye[0] * girlW;
+    eyeY = girlBY + G.eye[1] * girlH;
+    // 脸颊滑落路径（垂直：眼 → 颌边，x 恒等于 eyeX，行程 = 脸长 0.06×图高）
+    slP0 = [eyeX, eyeY];
+    slP1 = [eyeX, eyeY + girlH * 0.03];
+    slP2 = [eyeX, eyeY + girlH * 0.06];
+    // 坠落物理：初速继承滑落末速，g 反解自落点（重力形态 + 时间基准）；垂直落体无水平分量
+    const T = C.tear.fall;
+    impY = horizonY + (p.height - horizonY) * C.tear.impDepth;
+    fallV0 = ((girlH * 0.06) / C.tear.slide) * 0.55; // 滑落末速（行程 0.06×图高 / slide）
+    fallG = (2 * ((impY - slP2[1]) - fallV0 * T)) / (T * T);
+    fallVX = 0;
+    impX = slP2[0];
+    // 湖底沉钟：钟心 = 泪落点（泪落即落钟心），半径受湖深钳制，完整没入湖面下
+    clkX = impX; clkY = impY;
+    clkR = Math.min(C.clock.r * p.width,
+                    (impY - horizonY - 8) / C.clock.squash,
+                    (p.height - impY - 8) / C.clock.squash);
+  }
+
+  p.preload = () => {
+    girlImg = p.loadImage(C.girl.img);
+  };
+
+  p.setup = () => {
+    p.createCanvas(p.windowWidth, p.windowHeight);
+    p.textFont(CN);
+    p.noiseSeed(C.seed);
+    glowCyan = glowSprite([150, 200, 255], 64);
+    glowWarm = glowSprite([255, 200, 140], 64);
+    buildBg(); buildGrain(); buildVignette(); build();
+    cornerEl.innerHTML = C.corner.lines
+      .map(l => l.replace(/空白/g, '<span class="blank">空白</span>'))
+      .join("<br>");
+    captionEl.textContent = C.caption;
+    document.fonts.ready.then(() => { glyphCache.clear(); });
+  };
+
+  p.windowResized = () => {
+    p.resizeCanvas(p.windowWidth, p.windowHeight);
+    if (!isFinite(p.width) || !isFinite(p.height) || p.width < 2 || p.height < 2) return;
+    buildBg(); buildGrain(); buildVignette(); build();
+  };
+
+  p.mousePressed = () => {
+    if (!C.interact.enable) return;
+    if (iTears.length > 6) iTears.shift();
+    // 点上部（天空）时吸附到湖面
+    const ty = Math.max(p.mouseY, horizonY + 12);
+    iTears.push({ x: p.mouseX, ty, t0: tG, impacted: false });
+  };
+
+  /* —— 溅珠 —— */
+  function spawnSplash(x, y, count, spdScale) {
+    const S = C.splash;
+    for (let i = 0; i < count; i++) {
+      const a = -Math.PI / 2 + (p.random() - 0.5) * 1.6;
+      const v = lerp(S.speed[0], S.speed[1], p.random()) * spdScale;
+      splashes.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v,
+                      t0: tG, life: S.life * (0.7 + p.random() * 0.6),
+                      sz: lerp(S.size[0], S.size[1], p.random()) });
+    }
+  }
+
+  /* —— 叙事泪滴位置：停留(0) → 滑落(1) → 坠落(2)，返回 [x, y, phase, k] —— */
+  function tearPos(t) {
+    const T = C.tear, t0 = t - T.at;
+    if (t0 <= 0) return [eyeX, eyeY, 0, 0];
+    if (t0 < T.dwell) return [eyeX, eyeY, 0, t0 / T.dwell]; // 停留：凝在眼上
+    const t1 = t0 - T.dwell;
+    if (t1 < T.slide) { // 滑落：沿脸颊贝塞尔，smoothstep 缓动
+      const s = t1 / T.slide, e = s * s * (3 - 2 * s), u = 1 - e;
+      const x = u * u * slP0[0] + 2 * u * e * slP1[0] + e * e * slP2[0];
+      const y = u * u * slP0[1] + 2 * u * e * slP1[1] + e * e * slP2[1];
+      return [x, y, 1, s];
+    }
+    const t2 = Math.min(t1 - T.slide, T.fall); // 坠落：初速 + 重力匀加速（g 已反解）
+    return [slP2[0] + fallVX * t2,
+            slP2[1] + fallV0 * t2 + 0.5 * fallG * t2 * t2,
+            2, t2 / T.fall];
+  }
+
+  function drawTear(x, y, size, alpha, stretch = 0, glowK = 1) {
+    const g = p.drawingContext;
+    g.save();
+    g.globalAlpha = alpha * 0.5 * glowK;
+    g.drawImage(glowCyan, x - 24 * glowK, y - 24 * glowK, 48 * glowK, 48 * glowK);
+    g.translate(x, y);
+    if (stretch > 0.01) g.scale(1 / (1 + stretch * 0.35), 1 + stretch);
+    g.globalAlpha = alpha;
+    g.fillStyle = `rgb(${C.tear.color.join(",")})`;
+    g.beginPath();
+    g.arc(0, 0, size, 0, Math.PI * 2);
+    g.moveTo(-size * 0.62, -size * 0.6);
+    g.lineTo(0, -size * 2.1);
+    g.lineTo(size * 0.62, -size * 0.6);
+    g.closePath();
+    g.fill();
+    g.restore();
+  }
+
+  /* —— 沉钟：速度系数（叙事停摆 × 交互卡壳） —— */
+  function clockFactor(tL) {
+    let f = 1;
+    if (tL >= IMPACT_T) {
+      const u = clamp01((tL - IMPACT_T) / C.clock.slowDur);
+      f = 1 - u * u * (3 - 2 * u); // smoothstep 减速至停摆
+    }
+    for (const it of iTears) { // 交互泪落钟附近 → 短暂卡壳
+      if (!it.impacted) continue;
+      const age = tG - it.impactT;
+      const d = Math.hypot(it.x - clkX, (it.ty - clkY) / C.clock.squash);
+      if (d < clkR * C.clock.interactR && age < C.clock.stutter[1])
+        f *= Math.min(1, 1 - C.clock.stutter[0] * Math.sin(Math.PI * clamp01(age / C.clock.stutter[1])));
+    }
+    return f;
+  }
+
+  /* —— 沉钟绘制：双线表圈 + 12 刻度 + 时/分针（透视压扁、淹没感、褪色同步） —— */
+  function drawClock(tL, drainR) {
+    const CK = C.clock, SQ2 = CK.squash, g = p.drawingContext;
+    // 涟漪扫过钟面 → 折射晃动 + 微亮（环半径扫过 0.6×clkR 处达峰）
+    let wob = 0, pulse = 0;
+    for (const r of ripples) {
+      const age = tG - r.t0;
+      if (age < 0 || age > r.life) continue;
+      const rr = r.speed * age;
+      const d = Math.hypot(clkX - r.x, (clkY - r.y) / SQ2);
+      const infl = Math.exp(-((rr - (d + clkR * 0.6)) ** 2) / (90 * 90)) * (1 - age / r.life);
+      wob += infl; pulse = Math.max(pulse, infl);
+    }
+    // 褪色：元素到钟心距离套用同一 drain 前沿（dy/0.3 压扁空间）
+    wob = Math.min(wob, 1); // 多圈涟漪叠加时钳制，避免晃动过大
+    const satAt = (ang, rr) => {
+      if (drainR < 0) return 1;
+      const dx = Math.cos(ang) * rr, dy = Math.sin(ang) * rr * SQ2;
+      return sstep(drainR - C.drain.soft, drainR, Math.hypot(dx, dy / C.drain.squash));
+    };
+    const colAt = (sat) => CK.col.map((c, i) => Math.round(lerp(c, L.gray[i], 1 - sat)));
+    // 泪落瞬间钟面被照亮
+    const flashAge = tL - IMPACT_T;
+    const boost = (flashAge >= 0 && flashAge < 0.6) ? (1 - flashAge / 0.6) * 0.5 : 0;
+    const baseA = CK.alpha * (0.85 + 0.15 * Math.sin(tG * 1.3)) * (1 + pulse * 0.5 + boost);
+
+    g.save();
+    g.translate(clkX + wob * CK.wobble * Math.sin(tG * 6.5),
+                clkY + wob * CK.wobble * 0.6 * Math.cos(tG * 5));
+    g.scale(1, SQ2); // 平躺透视压扁
+    g.lineCap = "round";
+    // 双线表圈（36 弧段逐段着色——褪色自钟心逐圈蔓延）
+    for (const ringR of [clkR, clkR * 0.88]) {
+      g.lineWidth = ringR === clkR ? 3 : 1.5;
+      for (let i = 0; i < 36; i++) {
+        const a0 = (i / 36) * Math.PI * 2, a1 = ((i + 1) / 36) * Math.PI * 2;
+        const sat = satAt((a0 + a1) / 2, ringR);
+        g.strokeStyle = `rgb(${colAt(sat).join(",")})`;
+        g.globalAlpha = baseA * lerp(1, 0.55, 1 - sat);
+        g.beginPath(); g.arc(0, 0, ringR, a0 + 0.02, a1 - 0.02); g.stroke();
+      }
+    }
+    // 12 刻度（3/6/9/12 主刻度加长）
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 - Math.PI / 2;
+      const major = i % 3 === 0;
+      const r1 = clkR * 0.78, r2 = r1 + clkR * (major ? 0.14 : 0.07);
+      const sat = satAt(a, (r1 + r2) / 2);
+      g.strokeStyle = `rgb(${colAt(sat).join(",")})`;
+      g.globalAlpha = baseA * (major ? 1 : 0.8) * lerp(1, 0.55, 1 - sat);
+      g.lineWidth = major ? 3.5 : 2;
+      g.beginPath();
+      g.moveTo(Math.cos(a) * r1, Math.sin(a) * r1);
+      g.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+      g.stroke();
+    }
+    // 指针（角度 = effT 有效走时累积）
+    const hands = [
+      { ang: -Math.PI / 2 + (effT / C.loop.total) * CK.longRev * Math.PI * 2,
+        len: 0.72, tail: 0.14, w: 3 },
+      { ang: -Math.PI / 2 + (effT / C.loop.total) * CK.shortRev * Math.PI * 2,
+        len: 0.45, tail: 0.10, w: 4.5 },
+    ];
+    for (const h of hands) {
+      const sat = satAt(h.ang, clkR * h.len * 0.6);
+      g.strokeStyle = `rgb(${colAt(sat).join(",")})`;
+      g.globalAlpha = baseA * 1.1 * lerp(1, 0.55, 1 - sat);
+      g.lineWidth = h.w;
+      g.beginPath();
+      g.moveTo(-Math.cos(h.ang) * clkR * h.tail, -Math.sin(h.ang) * clkR * h.tail);
+      g.lineTo(Math.cos(h.ang) * clkR * h.len, Math.sin(h.ang) * clkR * h.len);
+      g.stroke();
+    }
+    // 中心轴点
+    const sat0 = drainR < 0 ? 1 : sstep(drainR - C.drain.soft, drainR, 0);
+    g.fillStyle = `rgb(${colAt(sat0).join(",")})`;
+    g.globalAlpha = baseA * 1.2 * lerp(1, 0.55, 1 - sat0);
+    g.beginPath(); g.arc(0, 0, 5, 0, Math.PI * 2); g.fill();
+    // 水色罩染（淹没感）
+    g.globalAlpha = 0.22;
+    g.fillStyle = "rgb(12,18,38)";
+    g.beginPath(); g.arc(0, 0, clkR * 1.02, 0, Math.PI * 2); g.fill();
+    g.restore();
+    g.globalAlpha = 1;
+  }
+
+  p.draw = () => {
+    const dt = Math.min(p.deltaTime, 100) / 1000;
+    tG += dt;
+    const tL = tG % C.loop.total;
+    const g = p.drawingContext;
+
+    /* 1 底质层 */
+    g.drawImage(bgCache, 0, 0);
+
+    /* 2 生命层：星尘 + 光斑 */
+    g.fillStyle = "rgba(220,226,244,1)";
+    for (const m of motes) {
+      const a = 0.10 + 0.12 * Math.sin(tG * m.sp * 3 + m.ph);
+      g.globalAlpha = Math.max(0, a);
+      g.beginPath(); g.arc(m.x, m.y, m.r, 0, Math.PI * 2); g.fill();
+    }
+    for (const b of bokehs) {
+      const spr = b.warm ? glowWarm : glowCyan;
+      const bx = b.x + Math.sin(tG * b.sp + b.ph) * 40;
+      const by = b.y + Math.cos(tG * b.sp * 0.7 + b.ph) * 26;
+      g.globalAlpha = b.a * (0.8 + 0.2 * Math.sin(tG * 0.4 + b.ph));
+      g.drawImage(spr, bx - b.r, by - b.r, b.r * 2, b.r * 2);
+    }
+    g.globalAlpha = 1;
+
+    /* 5 事件层（前置计算） */
+    for (const it of iTears) {
+      if (!it.impacted && tG - it.t0 >= 0.7) {
+        it.impacted = true; it.impactT = tG;
+        spawnSplash(it.x, it.ty, 4, 0.6);
+        for (let k = 0; k < 3; k++)
+          ripples.push({ x: it.x, y: it.ty, t0: tG + k * lerp(0.15, 0.3, p.random()),
+                         speed: 200, life: 1.8, seed: p.random() * 100, w: 1 + p.random() });
+      }
+    }
+    iTears = iTears.filter((it) => !it.impacted || tG - it.impactT < C.interact.heal[1] + 0.2);
+    if (tL >= IMPACT_T && tL - dt < IMPACT_T) {
+      spawnSplash(impX, impY, C.splash.count, 1);
+      for (let k = 0; k < C.ripple.count; k++)
+        ripples.push({ x: impX, y: impY,
+                       t0: tG + k * lerp(C.ripple.gap[0], C.ripple.gap[1], p.random()),
+                       speed: C.ripple.speed * (0.9 + p.random() * 0.2),
+                       life: C.ripple.life, seed: p.random() * 100, w: 1 + p.random() * 1.4 });
+    }
+    ripples = ripples.filter((r) => tG - r.t0 < r.life);
+    splashes = splashes.filter((s) => tG - s.t0 < s.life);
+    const drainR = tL >= IMPACT_T ? C.drain.speed * (tL - IMPACT_T) : -1;
+
+    /* 沉钟走时：循环重置归零（纱幕遮蔽），速度系数 = 叙事停摆 × 交互卡壳 */
+    if (tL < prevTl) effT = 0;
+    prevTl = tL;
+    const cf = clockFactor(tL);
+    effT += dt * cf;
+
+    /* 3 主体层：湖底沉钟（淹没在月光倒影与字符之下） */
+    drawClock(tL, drainR);
+
+    /* 3 主体层：月光倒影（月下光路，上窄下宽） */
+    const SQ = C.ripple.squash;
+    g.lineCap = "round";
+    g.strokeStyle = "rgba(245,235,205,1)";
+    for (const rf of refls) {
+      const y = horizonY + (p.height - horizonY) * rf.f;
+      const spread = lerp(p.width * 0.015, p.width * 0.12, rf.f);
+      const x = moonX + rf.off * spread;
+      const a = L.moonRefl.a * (0.45 + 0.55 * (0.5 + 0.5 * Math.sin(tG * rf.sp + rf.ph)))
+              * (1 - rf.f * 0.3);
+      g.globalAlpha = a;
+      g.lineWidth = 1 + rf.f * 1.6;
+      g.beginPath();
+      g.moveTo(x - rf.len / 2, y); g.lineTo(x + rf.len / 2, y);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+
+    /* 3 主体层：流光线 */
+    g.strokeStyle = "rgba(190,215,250,1)";
+    for (const s of streaks) {
+      const sx = (s.x + s.sp * tG) % (p.width + 120) - 60;
+      g.globalAlpha = L.streaks.a * (0.6 + 0.4 * Math.sin(tG * 1.1 + s.ph));
+      g.lineWidth = s.w;
+      g.beginPath();
+      g.moveTo(sx - s.len, s.y); g.lineTo(sx, s.y);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+
+    /* 3 主体层：环境碎纹（随机生灭的扁椭圆弧） */
+    g.strokeStyle = "rgba(190,215,250,1)";
+    g.lineWidth = 1;
+    for (const f of flecks) {
+      let age = tG - f.t0;
+      if (age > f.life) { Object.assign(f, newFleck(null)); age = tG - f.t0; }
+      if (age < 0) continue;
+      const nearK = (f.y - horizonY) / (p.height - horizonY);
+      g.globalAlpha = L.flecks.a * Math.sin((Math.PI * age) / f.life) * lerp(0.4, 1, nearK);
+      g.beginPath();
+      g.ellipse(f.x, f.y, f.len * lerp(0.5, 1.3, nearK), f.len * SQ, 0, f.a0, f.a0 + f.span);
+      g.stroke();
+    }
+    g.globalAlpha = 1;
+
+    /* 3 主体层：字符湖 */
+    const FW = L.flowWave, SM = L.shimmer, PW = C.ripple.pushWidth;
+    const spanW = p.width + L.margin * 2;
+    for (const ch of chars) {
+      const rm = rowsMeta[ch.row];
+      const x = ((ch.x0 + rm.speed * tG) % spanW + spanW) % spanW - L.margin;
+      let y = rm.y + Math.sin(x * FW.k - tG * FW.speed + ch.ph) * FW.amp;
+      // 涟漪波前推挤（压扁空间计算）
+      let dx = 0, dy = 0;
+      for (const r of ripples) {
+        const age = tG - r.t0;
+        if (age < 0 || age > r.life) continue;
+        const rr = r.speed * age;
+        const ddx = x - r.x, ddy = (y - r.y) / SQ;
+        const d = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+        const infl = Math.exp(-((d - rr) * (d - rr)) / (PW * PW)) * (1 - age / r.life);
+        dx += (ddx / d) * C.ripple.push * infl;
+        dy += (ddy / d) * C.ripple.push * infl * SQ;
+      }
+      // 沉钟搅动：指针走时带动钟周水流（停摆后消失）
+      if (cf > 0.01) {
+        const ddx = x - clkX, ddy = y - clkY;
+        const d = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+        const RR = clkR * 1.15;
+        if (d < RR) {
+          const sw = C.clock.stir * cf * (1 - d / RR);
+          dx += (-ddy / d) * sw;
+          dy += (ddx / d) * sw;
+        }
+      }
+      // 饱和度：叙事褪色 × 交互局部褪色（愈合）
+      let sat = 1;
+      if (drainR >= 0) {
+        const ddx = x - impX, ddy = (y - impY) / C.drain.squash;
+        const d = Math.sqrt(ddx * ddx + ddy * ddy);
+        sat = sstep(drainR - C.drain.soft, drainR, d);
+      }
+      for (const it of iTears) {
+        if (!it.impacted) continue;
+        const age = tG - it.impactT;
+        const rLoc = Math.min(C.interact.maxR, (age / C.interact.grow) * C.interact.maxR);
+        const ddx = x - it.x, ddy = (y - it.ty) / SQ;
+        const d = Math.sqrt(ddx * ddx + ddy * ddy);
+        const dip = 1 - sstep(rLoc - 80, rLoc, d);
+        const heal = 1 - sstep(C.interact.heal[0], C.interact.heal[1], age);
+        sat = Math.min(sat, 1 - dip * heal);
+      }
+      const spr = glyph(ch.ch, rm.band);
+      const sc = rm.font / BASE_FONT;
+      const glint = 1 - SM.amp * (0.5 + 0.5 * Math.sin(x * SM.k - tG * SM.speed + ch.ph));
+      const baseA = ch.aJ * glint * rm.depthA;
+      g.save();
+      g.translate(x + dx, y + dy);
+      if (sat > 0.003) {
+        g.globalAlpha = sat * baseA;
+        g.drawImage(spr.col, -spr.ox * sc, -spr.oy * sc, spr.w * sc, spr.h * sc);
+      }
+      if (sat < 0.997) {
+        g.globalAlpha = (1 - sat) * L.dimAlpha * baseA;
+        g.drawImage(spr.gray, -spr.ox * sc, -spr.oy * sc, spr.w * sc, spr.h * sc);
+      }
+      g.restore();
+    }
+    g.globalAlpha = 1;
+
+    /* 4 剪影层：女孩（multiply 混合去白底）坐于月牙上 */
+    if (girlImg && girlImg.width > 0) {
+      const bobY = Math.sin(tG * 0.8) * C.girl.bob;
+      p.blendMode(p.MULTIPLY);
+      p.image(girlImg, girlBX, girlBY + bobY, girlW, girlH);
+      p.blendMode(p.BLEND);
+    }
+
+    /* 5 事件层（绘制）：涟漪 → 闪光 → 溅珠 → 泪滴 */
+    p.blendMode(p.ADD);
+    p.noFill();
+    g.save();
+    g.beginPath();
+    g.rect(0, horizonY, p.width, p.height - horizonY);
+    g.clip();                 // ★ 涟漪/闪光约束在湖面内
+    for (const r of ripples) {
+      const age = tG - r.t0;
+      if (age < 0 || age > r.life) continue;
+      const rr = r.speed * age;
+      const aBase = (1 - age / r.life);
+      p.stroke(150, 200, 255, aBase * 120);
+      p.strokeWeight(r.w);
+      p.beginShape();
+      for (let i = 0; i <= 40; i++) {
+        const th = (i / 40) * Math.PI * 2;
+        const wob = 1 + C.ripple.wobble *
+          (p.noise(Math.cos(th) * 1.2 + r.seed, Math.sin(th) * 1.2, r.seed * 2) - 0.5) * 2;
+        p.vertex(r.x + Math.cos(th) * rr * wob, r.y + Math.sin(th) * rr * wob * SQ);
+      }
+      p.endShape(p.CLOSE);
+    }
+    // 落点闪光（0.5s，扁椭圆）
+    const flashAge = tL - IMPACT_T;
+    if (flashAge >= 0 && flashAge < 0.5) {
+      const fk = flashAge / 0.5;
+      p.stroke(220, 238, 255, (1 - fk) * 200);
+      p.strokeWeight(2);
+      p.ellipse(impX, impY, fk * 180, fk * 180 * SQ);
+      g.globalAlpha = (1 - fk) * 0.8;
+      g.drawImage(glowCyan, impX - 70, impY - 70, 140, 140);
+      g.globalAlpha = 1;
+    }
+    g.restore();              // 结束湖面裁剪（溅珠可越出水面）
+    // 溅珠
+    const GR = C.splash.gravity;
+    for (const s of splashes) {
+      const age = tG - s.t0;
+      if (age < 0 || age > s.life) continue;
+      const sx = s.x + s.vx * age;
+      const sy = s.y + s.vy * age + 0.5 * GR * age * age;
+      p.fill(200, 228, 255, (1 - age / s.life) * 200);
+      p.noStroke();
+      p.circle(sx, sy, s.sz * 2);
+    }
+    p.blendMode(p.BLEND);
+    // 叙事泪滴：脸上缓慢滑落 → 离脸加速坠落（拖尾 + 拉伸）
+    if (tL >= C.tear.at && tL < IMPACT_T) {
+      const [tx, ty2, ph, k] = tearPos(tL);
+      const aIn = sstep(C.tear.at, C.tear.at + 0.3, tL);
+      if (ph <= 1) {               // 脸上滑落：小而收敛，不遮挡剪影
+        drawTear(tx, ty2, C.tear.size * 0.95, aIn, 0.15, 0.5);
+      } else {                     // 坠落：拖尾 + 拉伸 + 全光晕
+        for (let i = C.tear.trail; i >= 1; i--) {
+          const [gx2, gy2, gph, gk] = tearPos(tL - 0.045 * i);
+          if (gph === 2 && gk > 0.02)
+            drawTear(gx2, gy2, C.tear.size * 0.85, aIn * 0.16 / i, C.tear.stretch * gk);
+        }
+        drawTear(tx, ty2, C.tear.size, aIn, C.tear.stretch * k);
+      }
+    }
+    // 交互泪滴（坠落中）
+    for (const it of iTears) {
+      if (it.impacted) continue;
+      const k = clamp01((tG - it.t0) / 0.7);
+      drawTear(it.x, -14 + (it.ty + 14) * k * k, 3.5, 0.9, C.tear.stretch * k * 0.7);
+    }
+
+    /* 6 质感层：颗粒 + 暗角 + 落幕纱幕 */
+    g.globalAlpha = 0.045;
+    const gr2 = (p.frameCount % 2 === 0) ? grainA : grainB;
+    g.drawImage(gr2, (Math.random() * 2) | 0, (Math.random() * 2) | 0);
+    g.globalAlpha = 0.9 + 0.1 * Math.sin(tG * 0.5);
+    g.drawImage(vigCache, 0, 0);
+    g.globalAlpha = 1;
+    const veil = Math.max(1 - sstep(0, C.loop.fadeIn, tL),
+                          sstep(C.loop.total - C.loop.fadeOut, C.loop.total, tL));
+    if (veil > 0.001) {
+      g.fillStyle = `rgba(${C.bg.bot.join(",")},${veil})`;
+      g.fillRect(0, 0, p.width, p.height);
+    }
+
+    /* DOM 层不透明度 */
+    const domA = Math.min(sstep(C.corner.fadeIn[0], C.corner.fadeIn[1], tL),
+                          1 - sstep(C.corner.fadeOutAt, C.loop.total, tL));
+    cornerEl.style.opacity = domA.toFixed(3);
+    captionEl.style.opacity = (domA * 0.9).toFixed(3);
+  };
+});
+</script>
+</body>
+</html>
