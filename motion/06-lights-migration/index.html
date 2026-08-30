@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="ffdaAAhjC0iDT0I6EU07qg">
+<head data-page-node-id="5cYaxuZHaLk7jEySHGOxGi">
+<meta charset="UTF-8" data-page-node-id="IVqy8Btt1dFuYYQbc9GWPK">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="AnOEfIl1KIypTjmQPZdjUC">
+<title>灯火迁徙 · Lights Migration</title>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" data-page-node-id="S5QAuXXhmSUfEFGjmfdRhH">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin data-page-node-id="AFA5vB4oJlZJnHmAyow0Ih">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400&family=Cormorant+Garamond:ital@1&display=swap" rel="stylesheet" data-page-node-id="p8Hutwk86AXks6myrdEBVR">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width:100%; height:100%;
+    overflow:hidden;
+    background:#0a1030;
+  }
+  canvas { display:block; }
+
+  /* ————— 左下角署名 ————— */
+  #caption {
+    position:fixed; left:min(42px,7vw); bottom:min(44px,5vh);
+    pointer-events:none; z-index:5;
+    font-family:"Noto Serif SC","Songti SC",serif;
+    font-weight:300; font-size:clamp(13px,2vmin,16px);
+    letter-spacing:.22em; padding-left:.22em; /* 平衡末字字距 */
+    color:rgba(232,226,210,.6);
+    opacity:0;
+    text-shadow:0 1px 10px rgba(0,0,0,.7);
+  }
+  #caption .en {
+    font-family:"Cormorant Garamond",serif;
+    font-style:italic; font-size:.82em;
+    color:rgba(200,196,184,.42);
+    letter-spacing:.14em;
+    margin-left:.9em;
+  }
+
+  /* ————— 暗角（磨砂夜景氛围） ————— */
+  #vignette {
+    position:fixed; inset:0; pointer-events:none; z-index:4;
+    background:radial-gradient(ellipse 90% 86% at 50% 46%,
+      rgba(0,0,0,0) 58%, rgba(4,6,28,.46) 100%);
+  }
+</style>
+</head>
+<body data-page-node-id="RAAmAcfUSMuX9RHKT9HXb4">
+<div id="caption" data-page-node-id="mPQShFvDChHr1kJ5d5rbrD">灯火迁徙<span class="en" data-page-node-id="DiNUJFwjyufTHXzCOuPEFD">Lights Migration</span></div>
+<div id="vignette" data-page-node-id="Gsf70LaoL2iqHEBBrNAGo1"></div>
+<script>
+/* ═════════════ 可配置区 ═════════════ */
+const CONFIG = {
+  vw: 540, vh: 960,          // 9:16 虚拟画布
+  horizon: 560,              // 地平线（城市基座）
+  loop: 20.0,                // 总循环时长（秒）
+  resetT: 18.0,              // 末幕复位起点：城市灯灭 / 乡村灯复燃
+  flight: 4.0,               // 每盏灯火飞行时长（时间基准，保证按时到达）
+  batchT: [3.0, 6.6, 10.2],  // 三批起飞时刻（断断续续）
+  batchGap: 0.24,            // 批内每盏间隔（挤着飞）
+  seed: 20260830,
+};
+
+const VW = CONFIG.vw, VH = CONFIG.vh, HORIZON = CONFIG.horizon;
+const LOOP = CONFIG.loop, RESET_T = CONFIG.resetT, RESET_D = LOOP - RESET_T;
+
+/* ——— 色彩体系：群青蓝夜 + 皇家蓝体块 + 深青勾线，暖黄只留给灯火（参考图基调） ——— */
+
+/* 远景背景楼（大气透视：更深、更糊、无细节） */
+const BG_BUILDINGS = [
+  {x:2,w:34,h:96},{x:40,w:26,h:66},{x:58,w:30,h:128},{x:96,w:22,h:84},{x:120,w:26,h:74},
+  {x:150,w:20,h:112},{x:186,w:34,h:104},{x:224,w:24,h:66},{x:250,w:28,h:86},{x:282,w:22,h:120},
+  {x:310,w:26,h:76},{x:330,w:30,h:116},{x:366,w:22,h:88},{x:392,w:24,h:74},{x:420,w:28,h:108},
+  {x:452,w:30,h:96},{x:486,w:22,h:70},{x:508,w:26,h:84},
+];
+
+/* 中景楼排（远景与主楼之间的过渡层，柔边无勾线） */
+const MID_BUILDINGS = [
+  {x:14,w:44,h:120},{x:66,w:36,h:158},{x:112,w:48,h:104},{x:168,w:34,h:142},
+  {x:206,w:52,h:96},{x:262,w:38,h:150},{x:306,w:46,h:112},{x:356,w:32,h:136},
+  {x:394,w:50,h:100},{x:448,w:36,h:146},{x:490,w:42,h:110},
+];
+
+/* 主排大楼：退台式顶层 + 连体裙楼，轮廓各异 */
+const BUILDINGS = [
+  { tone: 0.80, segs: [ {x:22, w:54, h:150}, {x:30, w:38, h:178} ] },
+  { tone: 0.95, segs: [ {x:84, w:40, h:212}, {x:91, w:26, h:252} ] },
+  { tone: 0.70, segs: [ {x:132, w:60, h:118} ] },
+  { tone: 0.95, segs: [ {x:200, w:48, h:236}, {x:207, w:34, h:276}, {x:213, w:22, h:298} ] },
+  { tone: 0.85, segs: [ {x:262, w:70, h:168}, {x:275, w:44, h:204} ] },
+  { tone: 0.75, segs: [ {x:318, w:34, h:190}, {x:323, w:24, h:214} ] },
+  { tone: 0.95, segs: [ {x:352, w:44, h:222}, {x:358, w:32, h:254} ], antenna: true },
+  { tone: 0.70, segs: [ {x:404, w:56, h:132} ] },
+  { tone: 0.88, segs: [ {x:466, w:42, h:166}, {x:473, w:28, h:198} ] },
+  { tone: 0.78, segs: [ {x:504, w:32, h:128} ] },
+];
+const LINKS = [   // 低矮裙楼，把相邻大楼连成一体
+  { x: 132, w: 118, h: 58 },   // B3 ↔ B4
+  { x: 404, w: 108, h: 52 },   // B8 ↔ B9
+];
+
+/* ——— 近景乡村房舍：聚落错落（近大远小、前后相叠、明度分档） ——— */
+const HOUSES = [
+  { x: 66,  w: 78,  base: 902, wallH: 52, roofH: 34, apex: .34, tone: .80,
+    win: [[.26,.34],[.64,.34],[.45,.72]] },                       // 远
+  { x: 268, w: 88,  base: 914, wallH: 58, roofH: 42, apex: .45, chimney: 'l', tone: .90,
+    win: [[.24,.30],[.66,.30],[.24,.70],[.66,.70]] },             // 中
+  { x: 172, w: 104, base: 926, wallH: 68, roofH: 36, apex: .60, tone: 1.0,
+    win: [[.20,.28],[.50,.28],[.80,.28],[.35,.68],[.65,.68]] },   // 近（最前）
+  { x: 442, w: 64,  base: 898, wallH: 46, roofH: 28, apex: .55, tone: .76,
+    win: [[.28,.34],[.62,.34],[.45,.72]] },                       // 最远
+];
+
+/* ——— 蜿蜒小路：三条交错缠绕的骨架（村口 → 城市基座） ——— */
+const PATHS = [
+  [[300, 884], [176, 784], [334, 700], [216, 626], [298, 570]],
+  [[168, 896], [316, 806], [152, 706], [292, 640], [238, 572]],
+  [[428, 888], [272, 812], [402, 714], [252, 646], [336, 574]],
+];
+
+/* ═════════════ 全局状态 ═════════════ */
+let lights = [];      // 乡村灯火/光团 {x,y,e,dur,chain,target,seed}
+let litWins = [];     // 被点亮的城市窗 {x,y,litAt,seed,wc}
+let stars = [];
+let skyLayer, cityLayer, groundLayer, grain;
+let S = 1, OX = 0, OY = 0;
+let startMs = 0;
+let grainFrame = -1;
+let antennaTip = null;
+
+/* ═════════════ p5 主流程 ═════════════ */
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  pixelDensity(1);
+  startMs = millis();
+  randomSeed(CONFIG.seed);
+  noiseSeed(CONFIG.seed);
+  buildSceneData();
+  rebuildLayers();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  rebuildLayers();
+}
+
+function draw() {
+  const t = ((millis() - startMs) / 1000) % LOOP;
+  // 末幕复位因子 0→1（18s→20s），保证 t=20 与 t=0 完全一致，无缝循环
+  let fr = constrain((t - RESET_T) / RESET_D, 0, 1);
+  fr = fr * fr * (3 - 2 * fr);
+
+  background(10, 16, 48);
+  image(skyLayer,    OX, OY, VW * S, VH * S);
+  image(cityLayer,   OX, OY, VW * S, VH * S);
+  image(groundLayer, OX, OY, VW * S, VH * S);
+
+  push();
+  translate(OX, OY);
+  scale(S);
+  drawMist(t);
+  drawStars(t, fr);
+  drawVillageLights(t, fr);
+  drawCityWindows(t, fr);
+  drawAntenna(t);
+  drawOrbs(t);
+  pop();
+
+  drawGrain();
+
+  // 署名淡入，末幕随复位淡出（与循环闭合同步）
+  const cap = document.getElementById('caption');
+  cap.style.opacity = (constrain(t / 2, 0, 1) * (1 - fr) * 0.9).toFixed(3);
+}
+
+/* ═════════════ 场景数据（确定性生成） ═════════════ */
+function buildSceneData() {
+  // —— 城市窗位网格（每段退台独立布窗，上层只取露出部分） ——
+  let slots = [];
+  for (const b of BUILDINGS) {
+    for (let si = 0; si < b.segs.length; si++) {
+      const sgm = b.segs[si];
+      const below = si > 0 ? b.segs[si - 1].h : 0;   // 被下段遮住的高度
+      const visH = sgm.h - below;
+      const cols = Math.floor((sgm.w - 12) / 12);
+      const rows = Math.floor((visH - 14) / 16);
+      for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) {
+        slots.push({
+          x: sgm.x + 7 + c * 12 + 3,
+          y: HORIZON - sgm.h + 9 + r * 16 + 4,
+        });
+      }
+    }
+  }
+  // 洗牌后取前 N 个作为将被点亮的窗
+  for (let i = slots.length - 1; i > 0; i--) {
+    const j = Math.floor(random(i + 1));
+    [slots[i], slots[j]] = [slots[j], slots[i]];
+  }
+
+  // —— 乡村灯火 → 光团 ——
+  let wins = [];
+  for (const h of HOUSES) {
+    for (const [fx, fy] of h.win) {
+      wins.push({
+        x: h.x + fx * h.w,
+        y: h.base - h.wallH + fy * h.wallH,
+      });
+    }
+  }
+  const N = wins.length;              // 15 盏
+  const perBatch = [5, 5, N - 10];    // 三批：5 / 5 / 5
+  let bi = 0, inBatch = 0;
+  for (let i = 0; i < N; i++) {
+    if (inBatch >= perBatch[bi]) { bi++; inBatch = 0; }
+    const e = CONFIG.batchT[bi] + inBatch * CONFIG.batchGap + random(-0.06, 0.06);
+    const dur = CONFIG.flight + random(-0.3, 0.3);
+    const target = slots[i];
+    // 飞行链：窗口 → 村口 → 所属小路的各弯点(带抖动) → 目标窗
+    const path = PATHS[i % PATHS.length];       // 三条小路轮流分派
+    const chain = [[wins[i].x, wins[i].y]];
+    for (let k = 0; k < path.length; k++) {
+      const j = k === 0 ? 6 : 14;   // 村口收拢，中段散开（挤着飞）
+      chain.push([path[k][0] + random(-j, j), path[k][1] + random(-j, j)]);
+    }
+    chain.push([target.x, target.y]);
+    lights.push({
+      x: wins[i].x, y: wins[i].y,
+      e, dur, chain, target,
+      seed: random(1000),
+    });
+    // 窗灯色温：75% 明黄 / 15% 米白 / 10% 橘橙（参考图的高亮黄窗基调）
+    const wr = random();
+    const wc = wr < 0.75 ? [255, 224, 120] : wr < 0.9 ? [255, 240, 190] : [255, 186, 96];
+    litWins.push({ x: target.x, y: target.y, litAt: e + dur, seed: random(1000), wc });
+    inBatch++;
+  }
+
+  // —— 城市"苏醒"补充窗：迁徙完成后陆续自行亮起（密度向参考图靠拢） ——
+  for (let i = N; i < Math.min(slots.length, N + 22); i++) {
+    const wr = random();
+    const wc = wr < 0.75 ? [255, 224, 120] : wr < 0.9 ? [255, 240, 190] : [255, 186, 96];
+    litWins.push({
+      x: slots[i].x, y: slots[i].y,
+      litAt: 12.2 + random(0, 4.6),
+      seed: random(1000), wc,
+    });
+  }
+
+  // —— 星空（暖黄与青白混杂，参考图的手绘星点感） ——
+  stars = [];
+  for (let i = 0; i < 90; i++) {
+    stars.push({
+      x: random(0, VW), y: random(0, HORIZON - 60),
+      r: random(0.7, 1.8), a: random(60, 160),
+      ph: random(TWO_PI), sp: random(0.4, 1.4),
+      warm: random() < 0.45,
+    });
+  }
+}
+
+/* ═════════════ 静态层（仅 resize 时重建） ═════════════ */
+function rebuildLayers() {
+  S = Math.min(width / VW, height / VH);
+  OX = (width - VW * S) / 2;
+  OY = (height - VH * S) / 2;
+
+  /* ———— 天空层：群青蓝渐变 + 城市暖光害 + 小满月（参考图基调） ———— */
+  skyLayer = createGraphics(VW, VH);
+  const cTop = color(14, 21, 62), cMid = color(22, 34, 96), cHor = color(36, 54, 132);
+  for (let y = 0; y <= HORIZON; y += 2) {
+    const u = y / HORIZON;
+    const c = u < 0.55 ? lerpColor(cTop, cMid, u / 0.55)
+                       : lerpColor(cMid, cHor, (u - 0.55) / 0.45);
+    skyLayer.stroke(c); skyLayer.line(0, y, VW, y);
+  }
+  skyLayer.noStroke();
+  skyLayer.fill(12, 18, 54); skyLayer.rect(0, HORIZON, VW, VH - HORIZON);
+  // 城市背后的暖橙光害（真实夜景线索，平衡上方冷月）
+  for (let r = 240; r > 0; r -= 12) {
+    skyLayer.fill(150, 96, 50, 3.0);
+    skyLayer.ellipse(VW / 2, HORIZON, r * 2.8, r * 0.9);
+  }
+  // 冷调薄霾叠加
+  for (let r = 260; r > 0; r -= 16) {
+    skyLayer.fill(70, 88, 160, 2.4);
+    skyLayer.ellipse(VW / 2, HORIZON, r * 2.6, r * 1.1);
+  }
+  // 满月：暖白小月、单层薄晕、隐约月海（克制，不抢戏）
+  const MX = 436, MY = 122, MR = 17;
+  skyLayer.fill(226, 224, 200, 8);  skyLayer.ellipse(MX, MY, MR * 5, MR * 5);
+  skyLayer.fill(246, 242, 218, 230); skyLayer.ellipse(MX, MY, MR * 2, MR * 2);
+  skyLayer.fill(204, 200, 172, 36);
+  skyLayer.ellipse(MX - 5, MY - 4, 8, 6);
+  skyLayer.ellipse(MX + 5, MY + 3, 6, 8);
+  skyLayer.ellipse(MX - 2, MY + 7, 5, 4);
+  skyLayer.filter(BLUR, 1.1);
+
+  /* ———— 城市层：远景楼 + 中景楼 + 退台主楼 + 裙楼，紫靛体块 + 手绘描边 ———— */
+  cityLayer = createGraphics(VW, VH);
+  cityLayer.noStroke();
+  // 远景背景楼（大气透视：明度最低、最柔）
+  cityLayer.fill(24, 22, 84);
+  for (const b of BG_BUILDINGS) cityLayer.rect(b.x, HORIZON - b.h, b.w, b.h);
+  // 中景楼排（过渡层，柔边无描边，微渐变）
+  for (const m of MID_BUILDINGS) {
+    for (let y = 0; y < m.h; y += 3) {
+      const c = lerpColor(color(54, 48, 158), color(30, 28, 96), y / m.h);
+      cityLayer.fill(c);
+      cityLayer.rect(m.x, HORIZON - m.h + y, m.w, 3);
+    }
+  }
+  const drawTower = (x, w, h, tone, below = 0) => {
+    // 紫靛竖向微渐变（上亮下沉，参考图的紫罗兰夜色）
+    for (let y = 0; y < h; y += 3) {
+      const u = y / h;
+      const c = lerpColor(color(76, 70, 202), color(38, 36, 116), u);
+      cityLayer.fill(red(c) * tone, green(c) * tone, blue(c) * tone);
+      cityLayer.rect(x, HORIZON - h + y, w, 3);
+    }
+    // 手绘描边：带抖动的分段线，松弛的速写感
+    cityLayer.noFill();
+    cityLayer.stroke(16, 14, 54, 135); cityLayer.strokeWeight(1.2);
+    sketchLine(cityLayer, x, HORIZON - h, x + w, HORIZON - h, 1.8);
+    sketchLine(cityLayer, x, HORIZON - h, x, HORIZON, 1.8);
+    sketchLine(cityLayer, x + w, HORIZON - h, x + w, HORIZON, 1.8);
+    cityLayer.noStroke();
+    // 檐口一线受光（也带一点手绘抖动）
+    cityLayer.stroke(172, 162, 255, 66 * tone); cityLayer.strokeWeight(1.2);
+    sketchLine(cityLayer, x, HORIZON - h - 0.8, x + w, HORIZON - h - 0.8, 0.9);
+    cityLayer.noStroke();
+  };
+  for (const lk of LINKS) drawTower(lk.x, lk.w, lk.h, 0.72);
+  for (const b of BUILDINGS) {
+    for (let si = 0; si < b.segs.length; si++) {
+      const sgm = b.segs[si];
+      drawTower(sgm.x, sgm.w, sgm.h, b.tone, si > 0 ? b.segs[si - 1].h : 0);
+    }
+    if (b.antenna) {
+      const top = b.segs[b.segs.length - 1];
+      const ax = top.x + top.w / 2;
+      cityLayer.stroke(74, 66, 165, 170); cityLayer.strokeWeight(2);
+      sketchLine(cityLayer, ax, HORIZON - top.h, ax, HORIZON - top.h - 22, 1.2);
+      cityLayer.noStroke();
+      antennaTip = { x: ax, y: HORIZON - top.h - 22 };
+    }
+  }
+  cityLayer.filter(BLUR, 1.0);
+
+  /* ———— 地面层：群青山坡 + 蓝光小路 + 质感房舍 + 疏树 ———— */
+  groundLayer = createGraphics(VW, VH);
+  groundLayer.noStroke();
+  const gTop = color(26, 38, 100), gBot = color(15, 23, 68);
+  for (let y = HORIZON; y < VH; y += 2) {
+    groundLayer.stroke(lerpColor(gTop, gBot, (y - HORIZON) / (VH - HORIZON)));
+    groundLayer.line(0, y, VW, y);
+  }
+  groundLayer.noStroke();
+  // 地平线处一线城市反光（衔接城市与地面之间的暗带）
+  groundLayer.fill(170, 112, 62, 7);
+  groundLayer.ellipse(VW / 2, HORIZON + 8, 620, 42);
+  // 乡村所在的缓坡（比地面亮一档，与背景分离）
+  groundLayer.fill(33, 47, 122);
+  groundLayer.ellipse(VW / 2, 1100, 920, 430);
+
+  // —— 三条小路：交错蜿蜒的渐细丝带 + 断续亮段 + 泥土颗粒 ——
+  const ribbonStarts = [[300, 926], [168, 928], [428, 926]];
+  PATHS.forEach((path, pi) => {
+    const ribbon = [ribbonStarts[pi], ...path];
+    const rp = sampleChainPts(ribbon, 0.02);
+    for (let i = 0; i < rp.length - 1; i++) {
+      const u = i / (rp.length - 1);
+      groundLayer.stroke(78, 100, 200, pi === 0 ? 26 : 20);
+      groundLayer.strokeWeight(lerp(pi === 0 ? 17 : 12, 4, u));
+      groundLayer.line(rp[i][0], rp[i][1], rp[i + 1][0], rp[i + 1][1]);
+    }
+    // 断续的中路微亮段（被月光照见的一节节路面，主路多、支路少）
+    const segs = pi === 0 ? [[0.06, 0.22], [0.38, 0.52], [0.66, 0.80], [0.90, 0.99]]
+               : pi === 1 ? [[0.10, 0.26], [0.58, 0.74]]
+                          : [[0.30, 0.46], [0.78, 0.94]];
+    for (const [u0, u1] of segs) {
+      const i0 = Math.floor(u0 * (rp.length - 1)), i1 = Math.floor(u1 * (rp.length - 1));
+      for (let i = i0; i < i1; i++) {
+        const u = i / (rp.length - 1);
+        groundLayer.stroke(130, 152, 245, pi === 0 ? 20 : 14);
+        groundLayer.strokeWeight(lerp(5, 1.6, u));
+        groundLayer.line(rp[i][0], rp[i][1], rp[i + 1][0], rp[i + 1][1]);
+      }
+    }
+    for (let i = 0; i < 110; i++) {   // 路面泥土颗粒
+      const u = random();
+      const idx = Math.min(rp.length - 2, Math.floor(u * (rp.length - 1)));
+      const p = rp[idx], q = rp[idx + 1];
+      let dx = q[0] - p[0], dy = q[1] - p[1];
+      const len = Math.hypot(dx, dy) || 1;
+      const off = random(-1, 1) * lerp(7, 2, u);
+      groundLayer.noStroke();
+      groundLayer.fill(170, 188, 255, random(8, 20));
+      groundLayer.ellipse(p[0] - dy / len * off, p[1] + dx / len * off,
+                          random(1, 2.2), random(1, 2.2));
+    }
+  });
+
+  // —— 疏树两棵（简约剪影，一大一小） ——
+  drawTree(groundLayer, 42, 908, 1.25);
+  drawTree(groundLayer, 522, 896, 0.7);
+
+  // —— 房舍：远→近绘制（前后相叠成聚落） ——
+  const sorted = [...HOUSES].sort((a, b) => a.base - b.base);
+  for (const h of sorted) drawHouse(groundLayer, h);
+  groundLayer.filter(BLUR, 0.8);
+
+  // —— 颗粒层（极薄磨砂，不再是雪花噪点） ——
+  grain = createGraphics(Math.ceil(VW / 2), Math.ceil(VH / 2));
+  grainFrame = -1;
+}
+
+/* 手绘线：分段 + 中点垂直抖动，模拟松弛的速写笔触（用于建筑描边） */
+function sketchLine(g, x1, y1, x2, y2, amp = 1.6) {
+  const len = Math.hypot(x2 - x1, y2 - y1);
+  const n = Math.max(2, Math.round(len / 12));
+  let px = x1, py = y1;
+  for (let i = 1; i <= n; i++) {
+    const t = i / n;
+    let x = lerp(x1, x2, t), y = lerp(y1, y2, t);
+    if (i < n) { x += random(-amp, amp); y += random(-amp, amp); }
+    g.line(px, py, x, y);
+    px = x; py = y;
+  }
+}
+
+/* 单栋房舍：紫靛墙身 + 手绘描边 + 屋顶 + 烟囱 + 月光檐线（tone 控制远近明度） */
+function drawHouse(g, h) {
+  const T = h.tone || 1;
+  const topY = h.base - h.wallH;
+  const apexX = h.x + h.w * h.apex, apexY = topY - h.roofH;
+  // 墙体基底（紫靛体块，比坡面亮两档，和背景彻底分离）
+  g.noStroke(); g.fill(74 * T, 68 * T, 205 * T);
+  g.rect(h.x, topY, h.w, h.wallH);
+  // 墙面木刻纹理（明/暗短笔触）
+  for (let i = 0; i < 110; i++) {
+    const wx = random(h.x + 2, h.x + h.w - 2);
+    const wy = random(topY + 2, h.base - 2);
+    if (random() < 0.5) g.stroke(104 * T, 96 * T, 245 * T, random(12, 26));
+    else                g.stroke(36 * T, 32 * T, 120 * T, random(12, 24));
+    g.strokeWeight(random(0.8, 1.6));
+    g.line(wx, wy, wx + random(-5, 5), wy + random(-1.5, 1.5));
+  }
+  // 屋顶（深一档的紫靛，山墙不对称）
+  g.noStroke(); g.fill(42 * T, 38 * T, 138 * T);
+  g.triangle(h.x - 7, topY, h.x + h.w + 7, topY, apexX, apexY);
+  // 屋面横向层叠纹理（茅瓦感）
+  for (let y = apexY + 4; y < topY; y += 3.2) {
+    const k = (y - apexY) / (topY - apexY);
+    const halfL = k * (apexX - (h.x - 7)), halfR = k * ((h.x + h.w + 7) - apexX);
+    g.stroke(64 * T, 58 * T, 180 * T, 20); g.strokeWeight(1.4);
+    g.line(apexX - halfL, y, apexX + halfR, y);
+  }
+  // 烟囱
+  if (h.chimney) {
+    const cx = h.chimney === 'r' ? h.x + h.w * 0.72 : h.x + h.w * 0.2;
+    g.noStroke(); g.fill(50 * T, 44 * T, 160 * T);
+    g.rect(cx, apexY + h.roofH * 0.18, 9, h.roofH * 0.7);
+  }
+  // 手绘描边（带抖动的分段线，房屋像"画"出来的而不是"贴"上去的）
+  g.noFill(); g.stroke(14, 12, 50, 225); g.strokeWeight(1.6);
+  sketchLine(g, h.x, topY, h.x + h.w, topY, 1.4);
+  sketchLine(g, h.x, topY, h.x, h.base, 1.4);
+  sketchLine(g, h.x + h.w, topY, h.x + h.w, h.base, 1.4);
+  sketchLine(g, h.x, h.base, h.x + h.w, h.base, 1.4);
+  sketchLine(g, h.x - 7, topY, apexX, apexY, 1.4);
+  sketchLine(g, apexX, apexY, h.x + h.w + 7, topY, 1.4);
+  // 月光檐线（右上方来光，淡紫收边）
+  g.stroke(200, 192, 255, 90 * T); g.strokeWeight(1.2);
+  sketchLine(g, apexX, apexY, h.x + h.w + 7, topY, 0.8);   // 右坡
+  g.stroke(200, 192, 255, 40 * T);
+  sketchLine(g, h.x, topY, h.x, h.base, 0.8);              // 左墙沿
+  // 窗不画底框：灯火在时是光，走后了无痕迹
+  g.noStroke();
+}
+
+/* 疏树：细干 + 三两斜枝 + 一线月光 */
+function drawTree(g, x, y, s) {
+  g.stroke(14, 20, 58); g.strokeWeight(3 * s);
+  g.line(x, y, x + 2 * s, y - 36 * s);
+  g.strokeWeight(1.5 * s);
+  g.line(x + 1 * s, y - 18 * s, x - 12 * s, y - 34 * s);
+  g.line(x + 1.5 * s, y - 25 * s, x + 13 * s, y - 42 * s);
+  g.line(x + 2 * s, y - 32 * s, x - 6 * s, y - 46 * s);
+  g.stroke(180, 195, 255, 44); g.strokeWeight(0.9 * s);
+  g.line(x + 3 * s, y - 4 * s, x + 4 * s, y - 35 * s);   // 树干右侧月光
+  g.noStroke();
+}
+
+/* ═════════════ 动态绘制 ═════════════ */
+
+/* 低空薄雾：三团极大的柔斑缓慢漂移（替代雪花噪点的"磨砂"） */
+function drawMist(t) {
+  noStroke();
+  const mists = [
+    { bx: 150, y: 845, rx: 190, ry: 70, a: 4, sp: 0.05, ph: 0 },
+    { bx: 390, y: 770, rx: 210, ry: 80, a: 3.5, sp: 0.04, ph: 2 },
+    { bx: 270, y: 590, rx: 240, ry: 60, a: 3, sp: 0.03, ph: 4 },
+  ];
+  for (const m of mists) {
+    fill(140, 160, 240, m.a);
+    ellipse(m.bx + Math.sin(t * m.sp * TWO_PI + m.ph) * 36, m.y, m.rx * 2, m.ry * 2);
+  }
+}
+
+function drawStars(t, fr) {
+  for (const s of stars) {
+    const a = s.a * (0.55 + 0.45 * Math.sin(t * s.sp + s.ph)) * (1 - fr * 0.6);
+    if (s.warm) stroke(255, 236, 170, a);
+    else        stroke(205, 218, 255, a);
+    strokeWeight(s.r);
+    point(s.x, s.y);
+  }
+  // 一颗亮星锚点（左上，与月对角呼应）
+  const va = (160 + 60 * Math.sin(t * 0.8)) * (1 - fr * 0.6);
+  stroke(255, 244, 205, va); strokeWeight(2.1); point(92, 150);
+  stroke(255, 244, 205, va * 0.3); strokeWeight(4.5); point(92, 150);
+  noStroke();
+}
+
+function drawVillageLights(t, fr) {
+  blendMode(ADD);
+  for (const L of lights) {
+    // 状态：亮着(闪烁) → 起飞瞬间熄灭 → 末幕复燃
+    let a;
+    if (t < L.e - 0.25)      a = 1;
+    else if (t < L.e + 0.3)  a = 1 - (t - (L.e - 0.25)) / 0.55;
+    else                     a = 0;
+    a = Math.max(a, fr);     // 复位阶段淡回
+    if (a <= 0.01) continue;
+    const flick = 0.8 + 0.2 * Math.sin(t * 7 + L.seed);
+    // 明黄小窗芯（参考图的高亮黄窗）
+    fill(255, 226, 130, 225 * a * flick);
+    rect(L.x - 3, L.y - 4, 6, 8, 1.5);
+    // 收敛的小暖晕
+    fill(255, 190, 95, 30 * a * flick);
+    ellipse(L.x, L.y, 16, 16);
+  }
+  blendMode(BLEND);
+}
+
+function drawCityWindows(t, fr) {
+  for (const w of litWins) {
+    if (t < w.litAt) continue;
+    const age = t - w.litAt;
+    const on = constrain(age / 0.45, 0, 1) * (1 - fr);   // 亮起 → 末幕渐灭
+    if (on <= 0.01) continue;
+    const flick = 0.92 + 0.08 * Math.sin(t * 5 + w.seed);
+    const boost = 1 + 0.6 * Math.exp(-age * 3);          // 点亮瞬间亮度过冲（无光晕）
+    // 纯矩形窗灯（色温各异）
+    fill(Math.min(255, w.wc[0] * boost), Math.min(255, w.wc[1] * boost),
+         Math.min(255, w.wc[2] * boost), 232 * on * flick);
+    rect(w.x - 3, w.y - 4, 6, 8, 1);
+  }
+}
+
+/* 天线顶端一点红光，缓慢明灭（城市呼吸感） */
+function drawAntenna(t) {
+  if (!antennaTip) return;
+  const a = 90 + 90 * Math.sin(t * 1.8);
+  blendMode(ADD);
+  fill(255, 90, 70, a);
+  ellipse(antennaTip.x, antennaTip.y, 3.5, 3.5);
+  blendMode(BLEND);
+}
+
+function drawOrbs(t) {
+  blendMode(ADD);
+  for (const L of lights) {
+    const u0 = (t - L.e) / L.dur;
+    if (u0 < 0 || u0 > 1) continue;
+    const fadeIn  = constrain(u0 / 0.08, 0, 1);
+    const fadeOut = 1 - constrain((u0 - 0.92) / 0.08, 0, 1);
+    const A = fadeIn * fadeOut;
+    // 余辉拖尾：光团飞过，在路上留下一小段渐暗的光痕（路由此被书写）
+    for (let k = 8; k >= 1; k--) {
+      const tk = t - k * 0.075;
+      if (tk < L.e) continue;
+      const p = orbPos(L, (tk - L.e) / L.dur, tk);
+      const ta = A * 0.4 * (1 - k / 9);
+      fill(255, 206, 120, 80 * ta);
+      ellipse(p.x, p.y, 6 - k * 0.55, 6 - k * 0.55);
+    }
+    const p = orbPos(L, u0, t);
+    // 小光团：贴身的薄晕 + 亮芯，无大光晕
+    fill(255, 196, 105, 55 * A);  ellipse(p.x, p.y, 13, 13);
+    fill(255, 228, 150, 130 * A); ellipse(p.x, p.y, 7.5, 7.5);
+    fill(255, 248, 215, 235 * A); ellipse(p.x, p.y, 4, 4);
+  }
+  blendMode(BLEND);
+}
+
+/* 光团位置：时间基准 + 缓动 + 横向轻摆 */
+function orbPos(L, uRaw, t) {
+  const u = constrain(uRaw, 0, 1);
+  const e = u * u * u * (u * (u * 6 - 15) + 10);   // smootherstep
+  const p = sampleChain(L.chain, e);
+  // 垂直于前进方向的呼吸摆动（两端收敛）
+  const p2 = sampleChain(L.chain, Math.min(e + 0.01, 1));
+  let dx = p2.x - p.x, dy = p2.y - p.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const w = Math.sin(u * 14 + L.seed) * 4 * Math.sin(u * Math.PI);
+  return { x: p.x + (-dy / len) * w, y: p.y + (dx / len) * w };
+}
+
+/* Catmull-Rom 链采样（端点重复） */
+function sampleChain(chain, u) {
+  const n = chain.length;
+  const P = [chain[0], ...chain, chain[n - 1]];
+  const segs = n - 1;
+  const s = Math.min(u, 0.99999) * segs;
+  const i = Math.floor(s), f = s - i;
+  const p0 = P[i], p1 = P[i + 1], p2 = P[i + 2], p3 = P[i + 3];
+  const cr = (a, b, c, d) =>
+    0.5 * (2 * b + (-a + c) * f + (2 * a - 5 * b + 4 * c - d) * f * f +
+           (-a + 3 * b - 3 * c + d) * f * f * f);
+  return { x: cr(p0[0], p1[0], p2[0], p3[0]), y: cr(p0[1], p1[1], p2[1], p3[1]) };
+}
+
+/* 采样整条链为折线点列（供小路渐细绘制） */
+function sampleChainPts(pts, step) {
+  const out = [];
+  const P = [pts[0], ...pts, pts[pts.length - 1]];
+  const segs = pts.length - 1;
+  const cr = (a, b, c, d, f) =>
+    0.5 * (2 * b + (-a + c) * f + (2 * a - 5 * b + 4 * c - d) * f * f +
+           (-a + 3 * b - 3 * c + d) * f * f * f);
+  for (let i = 0; i < segs; i++) {
+    for (let f = 0; f < 1; f += step) {
+      out.push([cr(P[i][0], P[i + 1][0], P[i + 2][0], P[i + 3][0], f),
+                cr(P[i][1], P[i + 1][1], P[i + 2][1], P[i + 3][1], f)]);
+    }
+  }
+  out.push(pts[pts.length - 1].slice());
+  return out;
+}
+
+/* 极薄颗粒层（低密度、低透明，只留一点"纸面"质感） */
+function drawGrain() {
+  const f8 = Math.floor(frameCount / 8);
+  if (f8 !== grainFrame) {
+    grainFrame = f8;
+    grain.clear();
+    const nDots = 700;
+    for (let i = 0; i < nDots; i++) {
+      const warm = random() < 0.12;
+      if (warm) grain.stroke(255, 217, 160, random(3, 12));
+      else      grain.stroke(220, 228, 250, random(2, 9));
+      grain.strokeWeight(1);
+      grain.point(random(grain.width), random(grain.height));
+    }
+  }
+  image(grain, OX, OY, VW * S, VH * S);
+}
+</script>
+</body>
+</html>
