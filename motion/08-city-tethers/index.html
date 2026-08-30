@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>牵丝之城 · City of Tethers</title>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400&family=Cormorant+Garamond:ital@1&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width:100%; height:100%;
+    overflow:hidden;
+    background:#060a18;
+  }
+  canvas { display:block; }
+
+  /* ————— 暗角（城市夜压氛围） ————— */
+  #vignette {
+    position:fixed; inset:0; pointer-events:none; z-index:4;
+    background:radial-gradient(ellipse 88% 84% at 50% 44%,
+      rgba(0,0,0,0) 55%, rgba(2,5,14,.55) 100%);
+  }
+</style>
+</head>
+<body>
+<div id="vignette"></div>
+<script>
+/* ═════════════ 可配置区（与 prompt.md 参数表一一对应） ═════════════ */
+const CONFIG = {
+  vw: 540, vh: 960,          // 9:16 虚拟画布
+  loop: 16.0, fade: 1.3,     // 总循环 / 末幕交叉溶解时长（秒）
+  cx: 270, horizonY: 400,    // 灭点
+  focal: 380, eyeH: 1.7,     // 焦距 / 机高（世界单位≈米）
+  zNear: 2, zFar: 38,        // 视距
+  manRz: 5.2, manH: 1.78,    // 人物景深（正常人比例）/ 身高
+  tRun: 4.5, tTrans: 6.0, tWalk: 10.5,  // 分幕时刻
+  vRun: 6.667,               // 奔跑速度 u/s（0→30）
+  seed: 20260831,
+};
+
+const VW = CONFIG.vw, VH = CONFIG.vh, LOOP = CONFIG.loop, FADE = CONFIG.fade;
+const CX = CONFIG.cx, HY = CONFIG.horizonY;
+const F = CONFIG.focal, EYEH = CONFIG.eyeH;
+const ZN = CONFIG.zNear, ZF = CONFIG.zFar;
+const T_RUN = CONFIG.tRun, T_TR = CONFIG.tTrans, T_WALK = CONFIG.tWalk;
+const ss = (a, b, x) => { const t = constrain((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+/* ═════════════ 时间轴（纯函数；s<0 有定义，供末幕叠化） ═════════════ */
+function camZOf(s) {
+  if (s < T_RUN) return CONFIG.vRun * s;                    // 奔跑（含 s<0 延伸）
+  if (s < T_TR)  return 30 + 4 * ss(0, 1, (s - T_RUN) / 1.5); // 丝滑减速
+  if (s < T_WALK) return 34 + 1.3333 * (s - T_TR);           // 散步
+  return 40 + 0.236 * (s - T_WALK);                          // 挣扎（几乎不动）
+}
+function stridePhase(s) {  // 步相位（累积步周期数）
+  if (s < T_RUN) return 2.2 * s;
+  if (s < T_TR) { const q = s - T_RUN; return 9.9 + 2.2 * q - 0.45 * q * q; }
+  if (s < T_WALK) return 12.1875 + 0.85 * (s - T_TR);
+  return 16.0125 + 0.5 * (s - T_WALK);
+}
+const runAmt = s => 1 - ss(T_RUN, T_TR, s);
+const struggleAmt = s => ss(10.5, 12.5, s);
+const lookEnv = s => ss(6, 7, s) * (1 - ss(9.8, 10.8, s));
+
+/* ═════════════ 全局状态 ═════════════ */
+let world = [];       // 统一渲染列表 {type, z, ...}
+let anchors = [];     // 丝线锚点 {z,x,y,ph,fk,birth}
+let clouds = [];
+let skyG;             // 静态层（天/星/地面/路），含安全边距
+let S = 1, OX = 0, OY = 0;
+let startMs = 0;
+const M = 10;         // 静态层安全边距（镜头微晃用）
+let PCX = CX, PHY = HY; // 加微晃后的灭点（每帧更新）
+/* 调试：?t=8.0 冻结时刻 */
+const FREEZE = parseFloat(new URLSearchParams(location.search).get('t'));
+
+/* ═════════════ p5 主流程 ═════════════ */
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  pixelDensity(displayDensity());
+  startMs = millis();
+  randomSeed(CONFIG.seed);
+  noiseSeed(CONFIG.seed);
+  buildSceneData();
+  rebuildLayers();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  rebuildLayers();
+}
+
+function draw() {
+  const t = FREEZE >= 0 ? FREEZE : ((millis() - startMs) / 1000) % LOOP;
+  drawScene(t, 1);
+  if (t > LOOP - FADE) {           // 末幕：叠化回"1.3s 前"的画面
+    const fr = ss(0, 1, (t - (LOOP - FADE)) / FADE);
+    drawScene(t - LOOP, fr);
+  }
+  drawingContext.globalAlpha = 1;
+}
+
+/* 世界投影（使用含微晃的灭点） */
+function projX(wx, rz) { return PCX + F * wx / rz; }
+function projY(wy, rz) { return PHY + F * (EYEH - wy) / rz; }
+
+function drawScene(s, alpha) {
+  const camZ = camZOf(s);
+  const ra = runAmt(s);
+
+  /* 镜头微晃（≤1.3px，随速度衰减） */
+  const amp = (0.3 + 0.7 * ra) * 0.8;
+  const shx = amp * (sin(TWO_PI * 1.7 * s) + 0.6 * sin(TWO_PI * 2.9 * s + 2.1));
+  const shy = amp * (0.7 * sin(TWO_PI * 2.3 * s + 1.3) + 0.4 * sin(TWO_PI * 3.7 * s + 0.5));
+  PCX = CX + shx; PHY = HY + shy;
+
+  S = Math.min(width / VW, height / VH);
+  OX = (width - VW * S) / 2;
+  OY = (height - VH * S) / 2;
+
+  drawingContext.globalAlpha = alpha;
+  background(6, 10, 24);
+  image(skyG, OX + (shx - M) * S, OY + (shy - M) * S, (VW + 2 * M) * S, (VH + 2 * M) * S);
+
+  push();
+  translate(OX + shx * S, OY + shy * S);
+  scale(S);
+
+  drawClouds(s);
+  drawMoon(s);
+
+  // —— 世界物件：按景深 远→近 统一排序绘制 ——
+  const items = [];
+  for (const o of world) {
+    const rz = o.z - camZ;
+    if (rz < ZN - 2.5 || rz > ZF) continue;
+    items.push({ o, rz });
+  }
+  items.sort((p, q) => q.rz - p.rz);
+  for (const { o, rz } of items) {
+    if (o.type === 'bld') drawBuilding(o, rz);
+    else if (o.type === 'house') drawHouse(o, rz, s);
+    else if (o.type === 'tree') drawTree(o, rz, s);
+    else if (o.type === 'lamp') drawLamp(o, rz, s);
+    else if (o.type === 'speck') drawSpeck(o, rz);
+    else if (o.type === 'home') drawHome(o, rz, s);
+  }
+
+  const pose = computeManPose(s);
+  drawThreads(s, camZ, pose);
+  drawMan(s, pose);
+
+  pop();
+  drawingContext.globalAlpha = 1;
+}
+
+/* ═════════════ 场景数据（确定性生成） ═════════════ */
+function buildSceneData() {
+  const cols = ['#0b1230', '#0d1535', '#0a1028'];
+
+  // —— 郊区小屋（带坡屋顶、暖窗） z∈[-14,30) ——
+  for (let i = 0, z = -13.5; z < 29; i++, z += 3.0 + random(0.8)) {
+    const side = (i % 2 === 0) ? -1 : 1;
+    const w = 1.8 + random(0.8), h = 1.9 + random(0.7);
+    const wins = [];
+    const nw = 2 + Math.floor(random(2.4));
+    for (let k = 0; k < nw; k++) wins.push({
+      fx: 0.22 + random(0.56), fy: 0.35 + random(0.4), ph: random(TWO_PI) });
+    world.push({ type: 'house', z: z + random(0.6),
+      x: side * (2.1 + random(0.8)), w, h,
+      roofH: 0.7 + random(0.4), d: 1.6 + random(0.8), wins });
+  }
+
+  // —— 郊区树木 ——
+  for (let i = 0, z = -12; z < 29.5; i++, z += 2.3 + random(0.7)) {
+    const side = (i % 2 === 0) ? 1 : -1;
+    world.push({ type: 'tree', z: z + random(0.5),
+      x: side * (1.7 + random(0.5)),
+      trunkH: 0.9 + random(0.5), cr: 0.5 + random(0.35), ph: random(TWO_PI) });
+  }
+
+  // —— 路灯 ——
+  for (let i = 0, z = -10; z < 30; i++, z += 5.5) {
+    const side = (i % 2 === 0) ? -1 : 1;
+    world.push({ type: 'lamp', z, x: side * 1.55, h: 2.6, ph: random(TWO_PI) });
+  }
+
+  // —— 城市外排高楼（立体盒体） z∈[24,45) ——
+  for (let i = 0; i < 16; i++) {
+    const side = (i % 2 === 0) ? -1 : 1;
+    const w = 1.3 + random(1.0), h = 4.5 + random(7.5);
+    const wc = Math.max(2, Math.round(w * 3.2));
+    const hr = Math.max(4, Math.round(h * 1.3));
+    const cells = [];
+    for (let c = 0; c < wc; c++) for (let r = 0; r < hr; r++) {
+      cells.push({ fx: (c + 0.5) / wc, fy: (r + 0.5) / hr,
+        on: random() < 0.42, a: 0.30 + random(0.55) });
+    }
+    world.push({ type: 'bld', z: 24 + i * 1.3 + random(0.5),
+      x: side * (2.3 + random(0.9)), w, h, d: 1.4 + random(1.2),
+      col: cols[i % 3], wc, hr, cells });
+  }
+
+  // —— 城市内侧低裙楼 ——
+  for (let i = 0; i < 10; i++) {
+    const side = (i % 2 === 0) ? 1 : -1;
+    const w = 0.8 + random(0.5), h = 2.2 + random(2.0);
+    const wc = Math.max(2, Math.round(w * 3.2));
+    const hr = Math.max(3, Math.round(h * 1.3));
+    const cells = [];
+    for (let c = 0; c < wc; c++) for (let r = 0; r < hr; r++) {
+      cells.push({ fx: (c + 0.5) / wc, fy: (r + 0.5) / hr,
+        on: random() < 0.36, a: 0.25 + random(0.5) });
+    }
+    world.push({ type: 'bld', z: 24.6 + i * 2.05 + random(0.8),
+      x: side * (1.5 + random(0.25)), w, h, d: 1.0 + random(0.8),
+      col: cols[(i + 1) % 3], wc, hr, cells });
+  }
+
+  // —— 远方楼群（城市剪影，进入视距淡入） ——
+  for (let i = 0; i < 6; i++) {
+    world.push({ type: 'bld', z: 46 + i * 2.2,
+      x: -3.5 + i * 1.4 + random(0.5), w: 1.6 + random(1.0),
+      h: 9 + random(8), d: 2.0, col: cols[i % 3], wc: 0, hr: 0, cells: [] });
+  }
+
+  // —— 家（暖窗小屋，城市深处） ——
+  world.push({ type: 'home', z: 52, x: 0.45, w: 1.7, h: 1.7, roofH: 1.0, d: 1.4 });
+
+  // —— 地面光点 ——
+  for (let i = 0; i < 60; i++) {
+    world.push({ type: 'speck', z: -13 + random(58),
+      x: (random(2) - 1) * 2.7, sz: 0.02 + random(0.03), a: 0.25 + random(0.5) });
+  }
+
+  // —— 丝线锚点（城市段，10s 起逐条伸出） ——
+  const fk = [1.1, 0.8, 1.3, 0.6, 1.5, 0.9, 1.2, 0.7, 1.4, 1.0, 0.85, 1.25, 0.95, 1.05];
+  for (let i = 0; i < 14; i++) {
+    const side = (i % 2 === 0) ? -1 : 1;
+    anchors.push({
+      z: 41 + i * 0.95,
+      x: side * (1.35 + random(0.4)),
+      y: 1.8 + (i % 3) * 0.8 + random(0.4),
+      ph: random(TWO_PI), fk: fk[i], birth: 10.0 + i * 0.22,
+    });
+  }
+
+  // —— 云 ——
+  for (let i = 0; i < 4; i++) {
+    clouds.push({ y: 55 + i * 30 + random(14), h: 10 + random(8),
+      w: 120 + random(90), off: i + random(0.4) });
+  }
+}
+
+function rebuildLayers() {
+  skyG = createGraphics(VW + 2 * M, VH + 2 * M);
+  skyG.pixelDensity(1);
+  const g = skyG;
+  g.push(); g.translate(M, M);
+
+  // —— 天空竖向渐变 ——
+  const top = color('#1c2c5c'), mid = color('#141f45'), bot = color('#0d1430');
+  for (let y = 0; y <= HY; y += 4) {
+    g.noStroke();
+    g.fill(y < HY * 0.55 ? lerpColor(top, mid, y / (HY * 0.55))
+                         : lerpColor(mid, bot, (y - HY * 0.55) / (HY * 0.45)));
+    g.rect(0, y, VW, 4);
+  }
+
+  // —— 背景星 ——
+  randomSeed(CONFIG.seed + 7);
+  for (let i = 0; i < 70; i++) {
+    g.fill(220, 228, 250, random(30, 110));
+    g.circle(random(VW), random(HY * 0.8), random(0.8, 1.8));
+  }
+
+  // —— 地面：灭点向下渐变 ——
+  const gTop = color('#0b1128'), gBot = color('#05080f');
+  for (let y = HY; y <= VH; y += 4) {
+    g.fill(lerpColor(gTop, gBot, (y - HY) / (VH - HY)));
+    g.rect(0, y, VW, 4);
+  }
+
+  // —— 中路（略亮，向灭点收拢） ——
+  g.noStroke();
+  g.fill(13, 20, 48, 200);
+  g.quad(CX - 26, HY, CX + 26, HY, CX + VW * 0.42, VH, CX - VW * 0.42, VH);
+
+  // —— 路缘透视线 ——
+  g.stroke(30, 42, 88, 160); g.strokeWeight(1.5);
+  g.line(CX - 26, HY, CX - VW * 0.42, VH);
+  g.line(CX + 26, HY, CX + VW * 0.42, VH);
+  g.noStroke();
+
+  g.pop();
+}
+
+/* ═════════════ 天象 ═════════════ */
+function drawClouds(s) {
+  const span = VW + 240;
+  noStroke();
+  for (const c of clouds) {
+    const x = wrap2(c.off * span / 4 + span * s / LOOP, span) - 120;
+    const y = c.y + 3 * sin(TWO_PI * 0.2 * s + c.off * 2);
+    fill(34, 52, 108, 64);
+    ellipse(x, y, c.w, c.h);
+    ellipse(x - c.w * 0.28, y + 4, c.w * 0.6, c.h * 0.8);
+    ellipse(x + c.w * 0.3, y - 3, c.w * 0.55, c.h * 0.7);
+  }
+}
+const wrap2 = (v, p) => ((v % p) + p) % p;
+
+function drawMoon(s) {
+  const mx = PCX + 128, my = 128;
+  const pulse = 0.5 + 0.5 * sin(TWO_PI * 0.125 * s);
+  noStroke();
+  for (let i = 5; i >= 1; i--) {
+    fill(210, 220, 248, 5 + 3 * pulse);
+    circle(mx, my, 64 + i * 20);
+  }
+  fill(232, 237, 251, 235);
+  circle(mx, my, 64);
+  fill(200, 210, 238, 90);
+  circle(mx - 10, my - 6, 12);
+  circle(mx + 8, my + 10, 8);
+}
+
+/* ═════════════ 世界物件绘制 ═════════════ */
+const bFade = rz => ss(ZN, ZN + 1.2, rz) * (1 - ss(30, 37.5, rz));
+
+/* 盒体侧面（临街一侧受光，立体感核心） */
+function sideFace(xEdge, h, rz, d, fade, baseCol, lightMul) {
+  const rz2 = rz + d;
+  const c = color(red(baseCol) * lightMul, green(baseCol) * lightMul, blue(baseCol) * lightMul);
+  c.setAlpha(255 * fade);
+  fill(c); noStroke();
+  quad(projX(xEdge, rz), projY(h, rz),
+       projX(xEdge, rz2), projY(h, rz2),
+       projX(xEdge, rz2), projY(0, rz2),
+       projX(xEdge, rz), projY(0, rz));
+}
+
+function drawBuilding(b, rz) {
+  const fade = bFade(rz);
+  if (fade < 0.02) return;
+  const sign = b.x < 0 ? 1 : -1;                    // 临街一侧
+  const bc = color(b.col);
+  sideFace(b.x + sign * b.w / 2, b.h, rz, b.d, fade, bc, 1.85);
+  // 正面（暗）
+  const sx = projX(b.x, rz);
+  const baseY = projY(0, rz), topY = projY(b.h, rz);
+  const sw = F * b.w / rz, sh = baseY - topY;
+  bc.setAlpha(255 * fade);
+  fill(bc); noStroke();
+  rect(sx - sw / 2, topY, sw, sh);
+  // 临街棱线冷光
+  const edge = b.x < 0 ? sx + sw / 2 : sx - sw / 2;
+  fill(120, 140, 200, 30 * fade);
+  rect(edge - 1, topY, 2, sh);
+  // 窗
+  if (sw > 26 && b.wc > 0) {
+    const cw = sw / b.wc, ch = sh / b.hr;
+    for (const cell of b.cells) {
+      if (!cell.on) continue;
+      const ww = cw * 0.5, wh = ch * 0.55;
+      if (ww < 1) continue;
+      fill(201, 214, 242, 255 * cell.a * fade * 0.85);
+      rect(sx - sw / 2 + cell.fx * sw - ww / 2,
+           topY + cell.fy * sh - wh / 2, ww, wh);
+    }
+  }
+}
+
+function drawHouse(h, rz, s) {
+  const fade = bFade(rz);
+  if (fade < 0.02) return;
+  const sign = h.x < 0 ? 1 : -1;
+  const wall = color(13, 19, 44);
+  const xE = h.x + sign * h.w / 2, rz2 = rz + h.d;
+  // 侧墙（受光）
+  sideFace(xE, h.h, rz, h.d, fade, wall, 1.7);
+  // 屋面（坡顶侧面）
+  const rc = color(20, 28, 58); rc.setAlpha(255 * fade);
+  fill(rc); noStroke();
+  quad(projX(h.x, rz), projY(h.h + h.roofH, rz),
+       projX(h.x, rz2), projY(h.h + h.roofH, rz2),
+       projX(xE, rz2), projY(h.h, rz2),
+       projX(xE, rz), projY(h.h, rz));
+  // 正面墙 + 山墙
+  const lx = projX(h.x - h.w / 2, rz), rx = projX(h.x + h.w / 2, rz);
+  const baseY = projY(0, rz), topY = projY(h.h, rz), apexY = projY(h.h + h.roofH, rz);
+  wall.setAlpha(255 * fade); fill(wall);
+  rect(lx, topY, rx - lx, baseY - topY);
+  triangle(lx, topY, projX(h.x, rz), apexY, rx, topY);
+  // 暖窗（郊区温度，微微闪烁）
+  for (const wn of h.wins) {
+    const fl = 0.72 + 0.28 * sin(TWO_PI * 0.3 * s + wn.ph);
+    fill(239, 159, 39, 200 * fade * fl);
+    const ww = (rx - lx) * 0.13, wh = (baseY - topY) * 0.16;
+    rect(lx + wn.fx * (rx - lx) - ww / 2, topY + wn.fy * (baseY - topY) - wh / 2, ww, wh);
+  }
+}
+
+function drawTree(tr, rz, s) {
+  const fade = bFade(rz);
+  if (fade < 0.02) return;
+  const sway = 0.05 * sin(TWO_PI * 0.5 * s + tr.ph) * F / rz / 60;
+  const bx = projX(tr.x, rz), by = projY(0, rz);
+  const tx = projX(tr.x + sway, rz), ty = projY(tr.trunkH, rz);
+  const cr = F * tr.cr / rz;
+  stroke(5, 9, 20, 255 * fade); strokeWeight(Math.max(1, F * 0.06 / rz));
+  line(bx, by, tx, ty);
+  noStroke(); fill(6, 12, 26, 255 * fade);
+  circle(tx, ty - cr * 0.4, cr * 2);
+  circle(tx - cr * 0.5, ty + cr * 0.15, cr * 1.3);
+  circle(tx + cr * 0.5, ty + cr * 0.1, cr * 1.35);
+}
+
+function drawLamp(l, rz, s) {
+  const fade = bFade(rz);
+  if (fade < 0.02) return;
+  const bx = projX(l.x, rz), by = projY(0, rz), ty = projY(l.h, rz);
+  stroke(20, 28, 56, 255 * fade); strokeWeight(Math.max(1, F * 0.04 / rz));
+  line(bx, by, bx, ty);
+  const fl = 0.8 + 0.2 * sin(TWO_PI * 0.4 * s + l.ph);
+  noStroke();
+  fill(239, 190, 90, 60 * fade * fl);
+  circle(bx, ty, F * 0.34 / rz);
+  fill(245, 205, 120, 230 * fade * fl);
+  circle(bx, ty, Math.max(1.5, F * 0.07 / rz));
+}
+
+function drawSpeck(sp, rz) {
+  const a = ss(ZN, ZN + 1.2, rz) * (1 - ss(26, 37, rz)) * sp.a;
+  if (a < 0.02) return;
+  const sz = constrain(F * sp.sz / rz, 0.6, 3);
+  noStroke(); fill(201, 214, 242, 255 * a);
+  rect(projX(sp.x, rz) - sz / 2, projY(0, rz) - sz / 2, sz, sz);
+}
+
+function drawHome(h, rz, s) {
+  const fade = bFade(rz);
+  if (fade < 0.02) return;
+  const flick = 0.75 + 0.25 * sin(TWO_PI * 0.56 * s + 2) + 0.06 * sin(TWO_PI * 1.4 * s);
+  const lx = projX(h.x - h.w / 2, rz), rx = projX(h.x + h.w / 2, rz);
+  const baseY = projY(0, rz), topY = projY(h.h, rz), apexY = projY(h.h + h.roofH, rz);
+  // 暖光晕
+  noStroke();
+  fill(239, 159, 39, 38 * fade * flick);
+  circle(projX(h.x, rz), topY, (rx - lx) * 2.6);
+  // 房体
+  fill(16, 23, 54, 255 * fade);
+  rect(lx, topY, rx - lx, baseY - topY);
+  triangle(lx, topY, projX(h.x, rz), apexY, rx, topY);
+  // 暖窗 + 地面光池
+  const ww = (rx - lx) * 0.30, wh = (baseY - topY) * 0.52;
+  fill(239, 159, 39, 255 * fade * flick);
+  rect(projX(h.x, rz) - ww / 2, baseY - wh * 1.15, ww, wh);
+  fill(239, 159, 39, 30 * fade * flick);
+  ellipse(projX(h.x, rz), baseY + 2, (rx - lx) * 1.5, Math.max(2, (rx - lx) * 0.14));
+}
+
+/* ═════════════ 男人：参考图剪影（大圆头 / 细大衣身 / 细腿） ═════════════ */
+function computeManPose(s) {
+  const sa = struggleAmt(s), ra = runAmt(s);
+  const surge = sa * (0.30 * sin(TWO_PI * 0.55 * (s - 10.5))
+                    - 0.10 * sin(TWO_PI * 1.10 * (s - 10.5)));
+  const rz = CONFIG.manRz + surge;
+  const u = F / rz;
+  const theta = TWO_PI * stridePhase(s);
+  const bob = 0.035 * u * (1 + 1.2 * ra) * (0.5 - 0.5 * cos(2 * theta));
+  const hunch = 0.10 * u + 0.08 * u * ra
+              + sa * (0.08 * u + 0.05 * u * sin(TWO_PI * 0.55 * (s - 10.5) - 0.7));
+  const yaw = sin(TWO_PI * (s - 6) / 3.6) * lookEnv(s);   // 散步环顾
+  const feetX = PCX, feetY = PHY + F * EYEH / rz - bob;
+  return { s, ra, sa, surge, rz, u, theta, bob, hunch, yaw, feetX, feetY };
+}
+
+function manAttach(p) {
+  const u = p.u, h = p.hunch;
+  return [
+    { x: p.feetX - 0.13 * u, y: p.feetY - 1.26 * u - h },  // 左肩
+    { x: p.feetX + 0.13 * u, y: p.feetY - 1.26 * u - h },  // 右肩
+    { x: p.feetX,            y: p.feetY - 1.05 * u - h * 0.8 }, // 背中
+    { x: p.feetX - 0.09 * u, y: p.feetY - 0.55 * u },      // 左胯
+    { x: p.feetX + 0.09 * u, y: p.feetY - 0.55 * u },      // 右胯
+  ];
+}
+
+function drawMan(s, p) {
+  const u = p.u, th = p.theta, h = p.hunch, ra = p.ra;
+  const fx = p.feetX, fy = p.feetY;
+  const ink = color(4, 6, 13);
+  strokeCap(ROUND);
+
+  // —— 细腿（奔跑高抬腿） ——
+  const liftMul = 1 + 0.9 * ra;
+  for (let i = 0; i < 2; i++) {
+    const sw = sin(th + i * PI);
+    const lift = Math.max(0, sw);
+    const hipX = fx + (i === 0 ? -1 : 1) * 0.055 * u, hipY = fy - 0.52 * u;
+    const kneeX = hipX + 0.02 * u * sw, kneeY = fy - 0.26 * u - 0.10 * u * lift * liftMul;
+    const footX = hipX + 0.035 * u * sw, footY = fy - 0.02 * u - 0.14 * u * lift * liftMul;
+    stroke(ink); strokeWeight(0.085 * u);
+    line(hipX, hipY, kneeX, kneeY);
+    strokeWeight(0.07 * u);
+    line(kneeX, kneeY, footX, footY);
+    noStroke(); fill(ink);
+    ellipse(footX + 0.015 * u, footY, 0.09 * u, 0.05 * u);
+  }
+
+  // —— 细长大衣身（圆肩梯形） ——
+  const roll = 0.015 * u * sin(th) + 0.02 * u * p.yaw;
+  const shY = fy - 1.30 * u - h, hipY2 = fy - 0.50 * u;
+  noStroke(); fill(ink);
+  beginShape();
+  vertex(fx - 0.145 * u, shY + roll);
+  bezierVertex(fx - 0.15 * u, shY - 0.06 * u + roll, fx + 0.15 * u, shY - 0.06 * u - roll,
+               fx + 0.145 * u, shY - roll);
+  vertex(fx + 0.105 * u, hipY2);
+  vertex(fx - 0.105 * u, hipY2);
+  endShape(CLOSE);
+
+  // —— 细手臂（贴身，奔跑时曲臂泵动） ——
+  for (let i = 0; i < 2; i++) {
+    const sgn = i === 0 ? -1 : 1;
+    const swing = sin(th + (i + 1) * PI);
+    const pump = 1 + 0.8 * ra;
+    const shX = fx + sgn * 0.135 * u, shArmY = fy - 1.26 * u - h;
+    const elX = fx + sgn * (0.155 + 0.02 * ra) * u,
+          elY = fy - (1.00 + 0.08 * swing * pump) * u - h * 0.7;
+    const haX = fx + sgn * (0.14 + 0.04 * ra * Math.max(0, swing)) * u,
+          haY = fy - (0.80 + 0.13 * swing * pump) * u - h * 0.5;
+    stroke(ink); strokeWeight(0.065 * u);
+    line(shX, shArmY, elX, elY);
+    strokeWeight(0.055 * u);
+    line(elX, elY, haX, haY);
+  }
+
+  // —— 大圆头（散步时左右环顾） ——
+  noStroke(); fill(ink);
+  const headX = fx + 0.055 * u * p.yaw;
+  ellipse(headX, fy - 1.52 * u - h * 0.9, 0.30 * u, 0.38 * u);
+}
+
+/* ═════════════ 丝线：10s 起逐条伸出，缠住他 ═════════════ */
+function drawThreads(s, camZ, pose) {
+  if (s < 9.9) return;
+  const attach = manAttach(pose);
+  const taut = pose.sa * (0.5 + 0.5 * sin(TWO_PI * 0.55 * (s - 10.5) - 0.9));
+  const k = pose.u / 73;
+  noFill();
+  for (let i = 0; i < anchors.length; i++) {
+    const a = anchors[i];
+    const born = ss(a.birth, a.birth + 0.7, s);   // 逐条伸出
+    if (born < 0.02) continue;
+    const rz = a.z - camZ;
+    const fade = ss(2.6, 3.6, rz) * (1 - ss(10.5, 13.4, rz)) * born;
+    if (fade < 0.02) continue;
+    const axp = projX(a.x, rz), ayp = projY(a.y, rz);
+    const b = attach[i % attach.length];
+    const mx = (axp + b.x) / 2, my = (ayp + b.y) / 2;
+    const sag = (14 + 46 * (1 - taut)) * k;
+    const amp = 5 * (1.6 - 1.2 * taut) * k;
+    const trem = sin(TWO_PI * a.fk * s + a.ph) * amp;
+    stroke(154, 168, 208, 255 * fade * (0.45 + 0.5 * taut));
+    strokeWeight(Math.max(0.8, 1.4 * k));
+    bezier(axp, ayp,
+           mx + trem, my + sag + 0.4 * trem,
+           mx - 0.5 * trem, my + sag * 0.6,
+           b.x, b.y);
+    noStroke();
+    fill(201, 214, 242, 140 * fade);
+    circle(axp, ayp, 2.4);
+    noFill();
+  }
+}
+</script>
+</body>
+</html>

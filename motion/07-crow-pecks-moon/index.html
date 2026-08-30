@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="XukSLTtiOCxshNx3qLot3V">
+<head data-page-node-id="jK1KghqJfIxpZCiMi3n7dC">
+<meta charset="UTF-8" data-page-node-id="nDE2pvK13crp1LW2ul3brB">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="9CI9xoiUezTCjGrfFzFzpq">
+<title>乌鸦啄月 · The Crow Pecking the Moon</title>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" data-page-node-id="NORjw4PdWGdecuDgmcFWBb">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin data-page-node-id="UvogRsvZIhZCoQlEIINVbx">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400&family=Cormorant+Garamond:ital@1&display=swap" rel="stylesheet" data-page-node-id="lOWDjDx4C6OClPKlMqHH97">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html, body {
+    width:100%; height:100%;
+    overflow:hidden;
+    background:#07141a;
+  }
+  canvas { display:block; }
+
+  /* ————— 暗角（深海夜色氛围） ————— */
+  #vignette {
+    position:fixed; inset:0; pointer-events:none; z-index:4;
+    background:radial-gradient(ellipse 90% 86% at 50% 46%,
+      rgba(0,0,0,0) 58%, rgba(3,10,14,.5) 100%);
+  }
+</style>
+</head>
+<body data-page-node-id="aBdkxzaw7aHoIueMGEjQ4F">
+<div id="vignette" data-page-node-id="GV3Z1mVgBENnNFjTKaxoAF"></div>
+<script>
+/* ═════════════ 可配置区（与 prompt.md 参数表一一对应） ═════════════ */
+const CONFIG = {
+  vw: 540, vh: 960,          // 9:16 虚拟画布
+  seaY: 745,                 // 海平线
+  loop: 16.0,                // 总循环时长（秒）
+  resetT: 13.0,              // 末幕复位起点：新咬痕愈合 / 新落星隐去
+  moonX: 210, moonY: 245, moonR: 110,
+  baseBiteDist: 100, baseBiteAng: -8, baseBiteR: 42,  // 初始即有的大缺口（全程不愈合）
+  crowAngle: 33,             // 乌鸦攀附的月缘角度（度，缺口下唇）
+  peckStart: 2.0, peckGap: 0.72, peckCount: 11,  // 啄击时刻表
+  bitePhi0: 80, bitePhi1: 150, // 小咬痕沿缺口下沿的位置角（度，绕缺口圆心）
+  biteR0: 6, biteR1: 9,      // 每口咬痕半径（小口吃）
+  basePileN: 55,             // 既有星堆颗数（全程驻留）
+  fragG: 80,                 // 月屑下落加速度（时间基准，保证按时落海）
+  seed: 20260830,
+};
+
+const VW = CONFIG.vw, VH = CONFIG.vh, SEAY = CONFIG.seaY;
+const LOOP = CONFIG.loop, RESET_T = CONFIG.resetT, RESET_D = LOOP - RESET_T;
+const MX = CONFIG.moonX, MY = CONFIG.moonY, MR = CONFIG.moonR;
+const D2R = Math.PI / 180;
+/* 循环安全角频率：k 个完整周期 / 每循环 */
+const W = k => TWO_PI * k / LOOP;
+
+/* ═════════════ 全局状态 ═════════════ */
+let pecks = [];       // {pt, bx, by, br} 小咬痕（沿基础缺口下沿）
+let frags = [];       // 月屑 {bt,x0,y0,vx,vy,A,om,ph,tl,landX,size,star}
+let crumbs = [];      // 啄击瞬间的碎屑飞溅 {bt,x,y,vx,vy,life,size}
+let pileStars = [];   // 新落海星 {x,y,size,ph,sk,born}（末幕淡出）
+let basePile = [];    // 既有星堆 {x,y,size,ph,sk}（全程驻留）
+let skyStars = [];    // 背景星
+let baseBite = {x:0,y:0,r:0}; // 基础缺口（初始残缺，全程不愈合）
+let pileCX = 300;     // 星堆中心
+let crowC = {x:0,y:0};// 乌鸦攀附点
+let skyLayer, seaLayer, moonG, grain;
+let S = 1, OX = 0, OY = 0;
+let startMs = 0;
+let grainFrame = -1;
+/* 调试：?t=8.0 冻结时刻 */
+const FREEZE = parseFloat(new URLSearchParams(location.search).get('t'));
+
+/* ═════════════ p5 主流程 ═════════════ */
+function setup() {
+  createCanvas(windowWidth, windowHeight);
+  pixelDensity(displayDensity());   // Retina 原生分辨率渲染，消除边缘锯齿
+  startMs = millis();
+  randomSeed(CONFIG.seed);
+  noiseSeed(CONFIG.seed);
+  buildSceneData();
+  rebuildLayers();
+}
+
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  rebuildLayers();
+}
+
+function draw() {
+  const t = FREEZE >= 0 ? FREEZE : ((millis() - startMs) / 1000) % LOOP;
+  // 末幕复位因子 0→1（13s→16s），保证 t=16 与 t=0 完全一致，无缝循环
+  let fr = constrain((t - RESET_T) / RESET_D, 0, 1);
+  fr = fr * fr * (3 - 2 * fr);
+
+  background(7, 20, 26);
+  image(skyLayer, OX, OY, VW * S, VH * S);
+  image(seaLayer, OX, OY, VW * S, VH * S);
+
+  push();
+  translate(OX, OY);
+  scale(S);
+  drawSkyStars(t);
+  drawMoon(t, fr);          // 月亮层：光盘 + 咬痕擦除 + 光晕
+  drawFrags(t);             // 坠落月屑
+  drawCrow(t, fr);          // 乌鸦剪影（啄击动作）
+  drawCrumbs(t);            // 啄击碎屑
+  drawWaves(t, fr);         // 海面波线
+  drawGlade(t, fr);         // 月光碎道
+  drawRipples(t, fr);       // 落海涟漪
+  drawPile(t, fr);          // 海面星堆（既有 + 新落）
+  pop();
+
+  drawGrain();
+}
+
+/* ═════════════ 场景数据（确定性生成） ═════════════ */
+function buildSceneData() {
+  // —— 基础缺口：月亮初始即残缺（参考图的大月牙口，全程不愈合） ——
+  const ba = CONFIG.baseBiteAng * D2R;
+  baseBite = {
+    x: MX + CONFIG.baseBiteDist * Math.cos(ba),
+    y: MY + CONFIG.baseBiteDist * Math.sin(ba),
+    r: CONFIG.baseBiteR,
+  };
+
+  // —— 啄击时刻表 + 小咬痕：沿缺口下沿（绕 B 的位置角 φ）把缺口向下啃深 ——
+  pecks = [];
+  for (let i = 0; i < CONFIG.peckCount; i++) {
+    const pt = CONFIG.peckStart + i * CONFIG.peckGap + random(-0.05, 0.05);
+    const phi = lerp(CONFIG.bitePhi0, CONFIG.bitePhi1, i / (CONFIG.peckCount - 1)) + random(-3, 3);
+    const rr = baseBite.r - 3;
+    pecks.push({
+      pt,
+      bx: baseBite.x + rr * Math.cos(phi * D2R),
+      by: baseBite.y + rr * Math.sin(phi * D2R),
+      br: lerp(CONFIG.biteR0, CONFIG.biteR1, 0.5 + 0.5 * Math.sin(i * 2.3)),  // 6–9
+    });
+  }
+
+  // —— 月屑：每次啄击落下 1–2 颗，参数化下落（时间基准） ——
+  frags = [];
+  for (let i = 0; i < pecks.length; i++) {
+    const pk = pecks[i];
+    const n = 1 + (i % 2);
+    for (let k = 0; k < n; k++) {
+      const bt = pk.pt + 0.08 + k * 0.12 + random(0, 0.05);
+      const x0 = pk.bx + random(-6, 4), y0 = pk.by + random(-2, 6);
+      const vx = random(-8, 10), vy = random(40, 70);
+      const g = CONFIG.fragG;
+      const dy = (SEAY - 3) - y0;
+      const tl = bt + (-vy + Math.sqrt(vy * vy + 2 * g * dy)) / g;  // 落海时刻
+      const A = random(9, 17), om = random(1.5, 2.6), ph = random(TWO_PI);
+      frags.push({
+        bt, x0, y0, vx, vy, A, om, ph, tl,
+        landX: x0 + vx * (tl - bt) + A * Math.sin(om * (tl - bt) + ph),
+        size: random(2.6, 4.4),
+        star: random() < 0.7,   // 70% 十字星芒 / 30% 光点
+      });
+    }
+  }
+
+  // —— 既有星堆：初始即存在（参考图海面上的一捧星光），全程驻留 ——
+  basePile = [];
+  for (let i = 0; i < CONFIG.basePileN; i++) {
+    const x = pileCX + (random() + random() + random() - 1.5) * 78;  // 近似正态散布
+    const prof = 34 * Math.exp(-Math.pow((x - pileCX) / 72, 2));
+    basePile.push({
+      x, y: SEAY + 5 - prof * random(0.2, 1) + random(0, 2),
+      size: random(2.2, 4.2),
+      ph: random(TWO_PI),
+      sk: [2, 3, 4, 5][Math.floor(random(4))],   // 闪烁频率（循环安全整数周期）
+    });
+  }
+
+  // —— 新落海星：叠加在既有星堆上，末幕 ×(1-fr) 淡出 ——
+  pileStars = frags.map(f => {
+    const prof = 34 * Math.exp(-Math.pow((f.landX - pileCX) / 72, 2));
+    return {
+      x: f.landX + random(-3, 3),
+      y: SEAY + 5 - prof * random(0.25, 1) + random(0, 2),
+      size: f.size * random(0.85, 1.15),
+      ph: random(TWO_PI),
+      sk: [2, 3, 4, 5][Math.floor(random(4))],
+      born: f.tl,
+    };
+  });
+
+  // —— 啄击碎屑：微小的月尘飞溅，0.55s 即湮 ——
+  crumbs = [];
+  for (const pk of pecks) {
+    for (let i = 0; i < 5; i++) {
+      crumbs.push({
+        bt: pk.pt + 0.05,
+        x: pk.bx, y: pk.by,
+        vx: random(-26, 42), vy: random(-38, 12),
+        life: random(0.35, 0.6),
+        size: random(0.8, 1.9),
+      });
+    }
+  }
+
+  // —— 背景疏星（暖黄为主，呼应月屑） ——
+  skyStars = [];
+  for (let i = 0; i < 30; i++) {
+    skyStars.push({
+      x: random(0, VW), y: random(0, SEAY - 80),
+      r: random(0.7, 1.7), a: random(50, 130),
+      ph: random(TWO_PI),
+      sk: [1, 2, 3][Math.floor(random(3))],
+      warm: random() < 0.6,
+    });
+  }
+
+  // —— 乌鸦攀附点 ——
+  const ca = CONFIG.crowAngle * D2R;
+  crowC = { x: MX + (MR + 3) * Math.cos(ca), y: MY + (MR + 3) * Math.sin(ca) };
+}
+
+/* ═════════════ 静态层（仅 resize 时重建） ═════════════ */
+function rebuildLayers() {
+  S = Math.min(width / VW, height / VH);
+  OX = (width - VW * S) / 2;
+  OY = (height - VH * S) / 2;
+
+  /* ———— 天空层：黛青渐变（无光晕，月亮干净地悬在夜空） ———— */
+  skyLayer = createGraphics(VW, VH);
+  skyLayer.pixelDensity(pixelDensity());
+  for (let y = 0; y <= SEAY; y += 2) {
+    skyLayer.stroke(skyColorAt(y));
+    skyLayer.line(0, y, VW, y);
+  }
+  skyLayer.noStroke();
+
+  /* ———— 海面层：黛青渐变 + 顶部一线微亮 ———— */
+  seaLayer = createGraphics(VW, VH);
+  seaLayer.pixelDensity(pixelDensity());
+  const sTop = color(12, 44, 56), sBot = color(6, 22, 32);
+  for (let y = SEAY; y < VH; y += 2) {
+    seaLayer.stroke(lerpColor(sTop, sBot, (y - SEAY) / (VH - SEAY)));
+    seaLayer.line(0, y, VW, y);
+  }
+  seaLayer.stroke(130, 195, 200, 22); seaLayer.strokeWeight(1);
+  seaLayer.line(0, SEAY + 0.5, VW, SEAY + 0.5);   // 海平线微光
+  // 海面零星暗纹（静态笔触，像远浪）
+  seaLayer.noStroke();
+  for (let i = 0; i < 60; i++) {
+    seaLayer.fill(90, 150, 160, random(4, 10));
+    seaLayer.ellipse(random(0, VW), random(SEAY + 16, VH - 10),
+                     random(14, 46), random(1, 2));
+  }
+  seaLayer.filter(BLUR, 0.6);
+
+  /* ———— 月亮层：每帧重绘（咬痕要愈合） ———— */
+  moonG = createGraphics(VW, VH);
+  moonG.pixelDensity(pixelDensity());   // 与主画布同密度，月缘/缺口边缘平滑
+
+  /* ———— 颗粒层 ———— */
+  grain = createGraphics(Math.ceil(VW / 2), Math.ceil(VH / 2));
+  grainFrame = -1;
+}
+
+function skyColorAt(y) {
+  const cTop = color(18, 58, 72), cHor = color(11, 38, 52);
+  return lerpColor(cTop, cHor, constrain(y / SEAY, 0, 1));
+}
+
+/* ═════════════ 动态绘制 ═════════════ */
+
+/* 月亮：无光晕。光盘用原生 arc + 竖向线性渐变（边缘平滑无锯齿），
+   咬痕 destination-out 锐利擦除（每帧重绘，末幕咬痕愈合） */
+function drawMoon(t, fr) {
+  moonG.clear();
+  const ctx = moonG.drawingContext;
+  moonG.noStroke();
+  // ① 光盘：原生 arc + 上亮下沉的竖向线性渐变（替代逐行矩形拼接，消除月缘锯齿）
+  const grad = ctx.createLinearGradient(0, MY - MR, 0, MY + MR);
+  grad.addColorStop(0, '#fcf4c8');
+  grad.addColorStop(1, '#eedea0');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(MX, MY, MR, 0, TWO_PI);
+  ctx.fill();
+  // 隐约月海（浅斑，不抢戏）
+  moonG.fill(214, 200, 146, 34);
+  moonG.ellipse(MX - 34, MY - 26, 34, 26);
+  moonG.ellipse(MX + 6, MY + 34, 26, 32);
+  moonG.ellipse(MX - 12, MY + 6, 18, 14);
+  // ② 咬痕：destination-out 擦除（canvas 原生抗锯齿）。基础缺口常驻；新咬痕随啄击弹开、末幕归零愈合
+  ctx.globalCompositeOperation = 'destination-out';
+  moonG.fill(0, 255);
+  moonG.ellipse(baseBite.x, baseBite.y, baseBite.r * 2, baseBite.r * 2);
+  for (const pk of pecks) {
+    const r = biteRadius(pk, t, fr);
+    if (r > 0.1) moonG.ellipse(pk.bx, pk.by, r * 2, r * 2);
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  image(moonG, 0, 0);
+}
+
+/* 咬痕半径：啄击后 0.16s easeOutCubic 弹开；末幕 ×(1-fr) 愈合 */
+function biteRadius(pk, t, fr) {
+  const u = constrain((t - pk.pt) / 0.16, 0, 1);
+  if (u <= 0) return 0;
+  const e = 1 - Math.pow(1 - u, 3);
+  return pk.br * e * (1 - fr);
+}
+
+/* 乌鸦剪影：攀附缺口下唇，idle 轻摇 + 啄击三段动作（预备下压→上啄→回收） */
+function drawCrow(t, fr) {
+  const pose = headPose(t);
+  const idle = 0.03 * Math.sin(t * W(1) + 0.6);
+
+  push();
+  translate(crowC.x, crowC.y + pose.pulse * 1.4);
+  rotate(idle - pose.pulse * 0.04);
+  scale(1.15);   // 略放大，增强暗色夜空中的存在感
+  noStroke();
+  fill(10, 14, 16);
+
+  // —— 躯干：胸宽臀收的水滴形 ——
+  beginShape();
+  vertex(-7, -12);                                  // 喉
+  bezierVertex(2, -19, 12, -11, 13, 2);             // 颈背 → 拱背
+  bezierVertex(14, 13, 10, 23, 3, 29);              // 背 → 臀
+  bezierVertex(-3, 25, -7, 13, -6, 1);              // 腹线
+  bezierVertex(-6, -5, -8, -9, -7, -12);            // 胸 → 喉
+  endShape(CLOSE);
+  // —— 尾：楔形长条，斜向下背离月亮 ——
+  beginShape();
+  vertex(0, 24); vertex(9, 22); vertex(17, 57); vertex(9, 59);
+  endShape(CLOSE);
+
+  // —— 爪：两短趾扣进月缘 ——
+  stroke(10, 14, 16); strokeWeight(1.6);
+  line(-4, 4, -10, 1); line(-3, 8, -10, 8);
+  noStroke();
+
+  // —— 头+喙：绕颈轴旋转，基础昂头 0.55 rad 使喙朝左上（啄缺口下沿） ——
+  push();
+  translate(-3, -13);
+  rotate(pose.a);
+  fill(10, 14, 16);
+  ellipse(-3, -8, 14, 13);                          // 头
+  triangle(-9, -11, -25, -6, -9, -3);               // 喙
+  // 眼：一点暖光，周期眨眼（循环安全）
+  const blink = Math.sin(t * W(5) + 2.1) > 0.985 ? 0.2 : 1;
+  fill(255, 230, 150, 220 * blink);
+  ellipse(-5, -9, 2.2 * blink + 0.4, 2.2 * blink + 0.4);
+  // 头顶一线月光（暗背景中托起轮廓）
+  noFill(); stroke(245, 235, 190, 42); strokeWeight(1);
+  arc(-3, -8, 14, 13, Math.PI * 1.05, Math.PI * 1.55);
+  pop();
+
+  // —— 胸沿一线月光（轮廓光，让剪影立起来） ——
+  noFill(); stroke(245, 235, 190, 36); strokeWeight(1.1);
+  beginShape();
+  vertex(-7, -4);
+  bezierVertex(-8, 6, -7, 16, -4, 25);
+  endShape();
+  noStroke();
+  pop();
+}
+
+/* 头部姿态：a=旋转角（0.55 基础昂头，正向=喙更深扎进缺口），pulse=啄击深度 0..1 */
+function headPose(t) {
+  let a = 0.55 + 0.06 * Math.sin(t * W(2) + 1.3);
+  let pulse = 0;
+  for (const pk of pecks) {
+    const dt = t - pk.pt;
+    if (dt >= -0.16 && dt < 0) {
+      a -= 0.22 * Math.sin((dt + 0.16) / 0.16 * Math.PI);   // 预备：向下压喙
+    } else if (dt >= 0 && dt < 0.1) {
+      const k = dt / 0.1;
+      a += 0.42 * k; pulse = Math.max(pulse, k);            // 上啄
+    } else if (dt >= 0.1 && dt < 0.42) {
+      const u = (dt - 0.1) / 0.32;
+      const k = 1 - u * u * (3 - 2 * u);
+      a += 0.42 * k; pulse = Math.max(pulse, k);            // 回收
+    }
+  }
+  return { a, pulse };
+}
+
+/* 坠落月屑：参数化下落 + 横向轻摆，星芒/光点两种形态 */
+function drawFrags(t) {
+  blendMode(ADD);
+  for (const f of frags) {
+    if (t < f.bt || t >= f.tl) continue;
+    const dt = t - f.bt;
+    const x = f.x0 + f.vx * dt + f.A * Math.sin(f.om * dt + f.ph);
+    const y = f.y0 + f.vy * dt + 0.5 * CONFIG.fragG * dt * dt;
+    const a = constrain(dt / 0.2, 0, 1);
+    if (f.star) {
+      drawSpark(x, y, f.size, 200 * a);
+      fill(255, 220, 140, 34 * a);
+      ellipse(x, y, f.size * 3.2, f.size * 3.2);
+    } else {
+      fill(255, 224, 150, 60 * a);
+      ellipse(x, y, f.size * 2.4, f.size * 2.4);
+      fill(255, 246, 210, 220 * a);
+      ellipse(x, y, f.size, f.size);
+    }
+  }
+  blendMode(BLEND);
+}
+
+/* 啄击瞬间：月尘飞溅 + 一小闪 */
+function drawCrumbs(t) {
+  blendMode(ADD);
+  for (const c of crumbs) {
+    const dt = t - c.bt;
+    if (dt < 0 || dt > c.life) continue;
+    const a = 1 - dt / c.life;
+    fill(252, 236, 180, 150 * a);
+    ellipse(c.x + c.vx * dt, c.y + c.vy * dt + 30 * dt * dt, c.size, c.size);
+  }
+  for (const pk of pecks) {
+    const dt = t - pk.pt;
+    if (dt < 0 || dt > 0.18) continue;
+    const a = 1 - dt / 0.18;
+    fill(255, 244, 200, 60 * a);
+    ellipse(pk.bx, pk.by, 16 * (1 - a * 0.5), 16 * (1 - a * 0.5));
+  }
+  blendMode(BLEND);
+}
+
+/* 背景疏星：明暗呼吸（循环安全频率） */
+function drawSkyStars(t) {
+  for (const s of skyStars) {
+    const a = s.a * (0.55 + 0.45 * Math.sin(t * W(s.sk) + s.ph));
+    if (s.warm) stroke(255, 236, 170, a);
+    else        stroke(205, 225, 235, a);
+    strokeWeight(s.r);
+    point(s.x, s.y);
+  }
+  noStroke();
+}
+
+/* 海面波线：三条正弦，缓慢推移 */
+function drawWaves(t, fr) {
+  noFill();
+  for (let k = 0; k < 3; k++) {
+    const y0 = SEAY + 26 + k * 52;
+    stroke(110, 175, 185, 9 + k * 2);
+    strokeWeight(1);
+    beginShape();
+    for (let x = 0; x <= VW; x += 14) {
+      vertex(x, y0 + Math.sin(x * 0.025 + t * W(1 + k) + k * 2.1) * 2.6);
+    }
+    endShape();
+  }
+  noStroke();
+}
+
+/* 月光碎道：月下一列破碎微光（克制的海面反光） */
+function drawGlade(t, fr) {
+  blendMode(ADD);
+  for (let i = 0; i < 12; i++) {
+    const yy = SEAY + 16 + i * 14;
+    const a = (5 + 4 * Math.sin(t * W(2) + i * 1.3)) * (1 - 0.4 * fr);
+    fill(250, 235, 170, a);
+    ellipse(228 + Math.sin(t * W(1) + i * 0.9) * 9, yy, 24 + i * 4, 2.4);
+  }
+  blendMode(BLEND);
+}
+
+/* 落海涟漪：扩散圆环 + 瞬间微闪 */
+function drawRipples(t, fr) {
+  for (const f of frags) {
+    const dt = t - f.tl;
+    if (dt < 0 || dt > 0.9) continue;
+    const u = dt / 0.9;
+    const a = (1 - u) * (1 - fr);
+    noFill();
+    stroke(200, 230, 225, 60 * a);
+    strokeWeight(1);
+    ellipse(f.landX, SEAY + 3, 6 + u * 44, (6 + u * 44) * 0.26);
+    if (dt < 0.3) {
+      blendMode(ADD);
+      noStroke();
+      fill(255, 240, 190, 90 * (1 - dt / 0.3) * (1 - fr));
+      ellipse(f.landX, SEAY + 2, 10, 4);
+      blendMode(BLEND);
+    }
+    noStroke();
+  }
+}
+
+/* 海面星堆：既有星堆全程驻留闪烁；新落星叠加其上、末幕淡出 */
+function drawPile(t, fr) {
+  blendMode(ADD);
+  // 堆底一层薄暖晕（常驻）
+  fill(255, 225, 150, 12);
+  ellipse(pileCX, SEAY + 7, 220, 40);
+  // 既有星堆（不受复位影响）
+  for (const p of basePile) {
+    const tw = 0.55 + 0.45 * Math.sin(t * W(p.sk) + p.ph);
+    drawSpark(p.x, p.y, p.size, 150 * tw);
+  }
+  // 新落星（末幕 ×(1-fr) 淡出）
+  if (fr < 0.999) {
+    for (const p of pileStars) {
+      if (t < p.born) continue;
+      const tw = 0.55 + 0.45 * Math.sin(t * W(p.sk) + p.ph);
+      drawSpark(p.x, p.y, p.size, 170 * tw * (1 - fr));
+    }
+  }
+  blendMode(BLEND);
+}
+
+/* 十字星芒：正交长短芒 + 亮芯 */
+function drawSpark(x, y, r, a) {
+  stroke(255, 240, 190, a);
+  strokeWeight(1.1);
+  line(x - r, y, x + r, y);
+  line(x, y - r, x, y + r);
+  strokeWeight(0.7);
+  const d = r * 0.52;
+  line(x - d, y - d, x + d, y + d);
+  line(x - d, y + d, x + d, y - d);
+  noStroke();
+  fill(255, 250, 222, a);
+  ellipse(x, y, r * 0.55, r * 0.55);
+}
+
+/* 极薄颗粒层（低密度、低透明，只留一点"纸面"质感） */
+function drawGrain() {
+  const f8 = Math.floor(frameCount / 8);
+  if (f8 !== grainFrame) {
+    grainFrame = f8;
+    grain.clear();
+    for (let i = 0; i < 650; i++) {
+      const warm = random() < 0.14;
+      if (warm) grain.stroke(255, 226, 170, random(3, 11));
+      else      grain.stroke(210, 232, 235, random(2, 8));
+      grain.strokeWeight(1);
+      grain.point(random(grain.width), random(grain.height));
+    }
+  }
+  image(grain, OX, OY, VW * S, VH * S);
+}
+</script>
+</body>
+</html>
