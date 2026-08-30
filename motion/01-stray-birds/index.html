@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>飞鸟集 · 流光 — Stray Birds</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;500&family=Cormorant+Garamond:ital@0;1&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+<style>
+  :root{
+    --ink: #f5ead8;
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; }
+  html,body{
+    width:100%; height:100%;
+    overflow:hidden;
+    background:#0a0e21;
+    cursor: crosshair;
+  }
+  #sketch{ position:fixed; inset:0; }
+
+  /* ————— 诗句层 ————— */
+  #verseWrap{
+    position:fixed; inset:0;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    pointer-events:none;
+    transform: translateY(-7vh);
+    z-index:5;
+  }
+  #verse{
+    font-family:"Noto Serif SC","Songti SC","STSong","SimSun",serif;
+    font-weight:300;
+    font-size:clamp(20px, 2.6vw, 34px);
+    letter-spacing:0.32em;
+    text-indent:0.32em; /* 平衡最后一个字的字距 */
+    line-height:2.1;
+    text-align:center;
+    color:var(--ink);
+    text-shadow:
+      0 0 24px rgba(232,180,110,.35),
+      0 2px 30px rgba(0,0,0,.55);
+    opacity:0;
+    max-width:82vw;
+  }
+  #verseEn{
+    font-family:"Cormorant Garamond", "Noto Serif SC", serif;
+    font-style:italic;
+    font-weight:300;
+    font-size:clamp(12px, 1.15vw, 16px);
+    letter-spacing:0.22em;
+    margin-top:2.4vh;
+    color:rgba(245,234,216,.55);
+    text-shadow:0 1px 16px rgba(0,0,0,.5);
+    opacity:0;
+  }
+  #verseSub{
+    font-family:"Noto Serif SC","Songti SC",serif;
+    font-size:clamp(10px, 0.85vw, 13px);
+    letter-spacing:0.5em;
+    text-indent:0.5em;
+    margin-top:1.6vh;
+    color:rgba(245,234,216,.4);
+    opacity:0;
+  }
+
+  /* ————— 顶部题名 ————— */
+  #title{
+    position:fixed; top:3.2vh; left:0; right:0;
+    text-align:center;
+    pointer-events:none; z-index:5;
+    font-family:"Noto Serif SC","Songti SC",serif;
+    font-weight:300;
+    font-size:clamp(11px, 1vw, 14px);
+    letter-spacing:0.9em;
+    text-indent:0.9em;
+    color:rgba(245,234,216,.42);
+    transition:opacity 2.5s ease;
+    white-space:nowrap; /* 防止大间距导致折行 */
+  }
+  #title .en{
+    display:block;
+    font-family:"Cormorant Garamond",serif;
+    font-style:italic;
+    font-size:.78em;
+    letter-spacing:.42em;
+    margin-top:.9em;
+    color:rgba(245,234,216,.28);
+  }
+
+  /* ————— 底部幕码 ————— */
+  #sceneNav{
+    position:fixed; bottom:3.4vh; left:0; right:0;
+    display:flex; gap:2.6em; justify-content:center;
+    pointer-events:none; z-index:5;
+    font-family:"Noto Serif SC","Songti SC",serif;
+    font-size:clamp(11px, 1vw, 14px);
+    color:rgba(245,234,216,.22);
+  }
+  #sceneNav span{ transition:all 1.6s ease; }
+  #sceneNav span.on{
+    color:rgba(250,225,180,.85);
+    text-shadow:0 0 14px rgba(232,180,110,.5);
+  }
+
+  /* ————— 操作提示 ————— */
+  #hint{
+    position:fixed; bottom:8.6vh; left:0; right:0;
+    text-align:center; pointer-events:none; z-index:5;
+    font-family:"Noto Serif SC","Songti SC",serif;
+    font-size:clamp(10px, 0.9vw, 13px);
+    letter-spacing:0.35em;
+    color:rgba(245,234,216,.4);
+    transition:opacity 3s ease;
+  }
+
+  /* ————— 胶片颗粒 ————— */
+  #grain{
+    position:fixed; inset:-60px;
+    pointer-events:none;
+    z-index:8;
+    opacity:.5;
+    mix-blend-mode:overlay;
+    background-repeat:repeat;
+  }
+
+  /* ————— 暗角 ————— */
+  #vignette{
+    position:fixed; inset:0;
+    pointer-events:none;
+    z-index:9;
+    background:radial-gradient(ellipse at 50% 46%, rgba(0,0,0,0) 52%, rgba(6,8,18,.34) 82%, rgba(5,7,15,.62) 100%);
+  }
+</style>
+</head>
+<body>
+
+<div id="sketch"></div>
+
+<div id="verseWrap">
+  <div id="verse"></div>
+  <div id="verseEn"></div>
+  <div id="verseSub">泰戈尔 · 飞鸟集</div>
+</div>
+
+<div id="title">飛 鳥 集<span class="en">Stray Birds · Rabindranath Tagore</span></div>
+<div id="sceneNav">
+  <span>壹</span><span>贰</span><span>叁</span><span>肆</span>
+</div>
+<div id="hint">移动鼠标 吹起一阵风 · 轻点 掀起一阵疾风</div>
+
+<div id="grain"></div>
+<div id="vignette"></div>
+
+<script>
+/* =========================================================================
+   飞鸟集 · 流光
+   —— 四幕生成式诗篇（p5.js）
+   壹 夏天的飞鸟：暮色流场鸟群，掠过即逝的光痕
+   贰 夏花 / 秋叶：粒子绽放成花，落叶归于尘墨
+   叁 痕迹：孤鸟横越长空，光痕渐渐消散殆尽
+   肆 海与天：层浪低语，月光在水面碎成波光
+   ========================================================================= */
+
+let trailPG, glowPG, groundPG;      // 发光轨迹层 / 花火层 / 墨点层
+let birds = [], flowers = [], leaves = [], glints = [], stars = [];
+let sceneIdx = 0, sceneStart = 0;
+let wind, gust = 0;
+let lastFlowerAt = 0, lastLeafAt = 0;
+let currentVerseKey = null;
+
+/* ————— 幕定义（总长 16s 循环；六句诗，每句完整停留约 2s）————— */
+const SCENES = [
+  {
+    dur: 2750,
+    verses: [
+      { t: 0, zh: '夏天的飞鸟，飞到我的窗前唱歌，又飞去了。',
+        en: 'Stray birds of summer come to my window to sing and fly away.' }
+    ]
+  },
+  {
+    dur: 5250,
+    verses: [
+      { t: 0,     zh: '使生如夏花之绚烂',
+        en: 'Let life be beautiful like summer flowers.' },
+      { t: 2600, zh: '死如秋叶之静美',
+        en: 'And death like autumn leaves.' }
+    ]
+  },
+  {
+    dur: 2750,
+    verses: [
+      { t: 0, zh: '天空中没有留下鸟的痕迹，<br>而我已飞过。',
+        en: 'I leave no trace of wings in the air,<br>but I am glad I have had my flight.' }
+    ]
+  },
+  {
+    dur: 5250,
+    verses: [
+      { t: 0,     zh: '海水呀，你说的是什么？<br>是永恒的疑问。',
+        en: 'What language is thine, O sea?<br>The language of eternal question.' },
+      { t: 2600, zh: '天空呀，你回答的话是什么？<br>是永恒的沉默。',
+        en: 'What language is thy answer, O sky?<br>The language of eternal silence.' }
+    ]
+  }
+];
+
+/* ————— 调色板（暮色流金）————— */
+const DUSK   = ['#141b33', '#37294f', '#7c3b58', '#c1654a', '#e8a04c'];
+const BLOOM  = ['#1d1430', '#42234e', '#8a3a58', '#c85a4a', '#eda45c'];
+const NIGHT  = ['#070b1c', '#0e1430', '#182449', '#243258', '#33406e'];
+const SEASKY = ['#080d1f', '#101736', '#1a2a52', '#284073', '#46557f'];
+
+const FLOWER_COLORS = ['#ffd27a', '#ff9e6b', '#ff7a8a', '#e8c37a', '#ffb56b'];
+const LEAF_COLORS   = ['#c98a3d', '#b5652f', '#d9a441', '#a05a2c', '#8a5a34'];
+
+/* =========================================================================
+   基础
+   ========================================================================= */
+function setup(){
+  const cnv = createCanvas(windowWidth, windowHeight);
+  cnv.parent('sketch');
+  pixelDensity(min(displayDensity(), 2));
+
+  trailPG  = createGraphics(width, height);
+  glowPG   = createGraphics(width, height);
+  groundPG = createGraphics(width, height);
+
+  wind = createVector(0, 0);
+  initStars();
+  enterScene(0);
+
+  makeGrain();
+  setInterval(jitterGrain, 90);
+
+  // 6 秒后收起操作提示
+  setTimeout(()=>{ document.getElementById('hint').style.opacity = 0; }, 6000);
+}
+
+function draw(){
+  const scene = SCENES[sceneIdx];
+  const t = millis() - sceneStart;
+
+  updateWind();
+
+  switch(sceneIdx){
+    case 0: sceneBirds(t, scene.dur);    break;
+    case 1: sceneBloom(t, scene.dur);    break;
+    case 2: sceneTrace(t, scene.dur);    break;
+    case 3: sceneSea(t, scene.dur);      break;
+  }
+
+  drawTransition(t, scene.dur);
+  updateVerseDOM(t, scene);
+
+  if(t > scene.dur){
+    sceneIdx = (sceneIdx + 1) % SCENES.length;
+    enterScene(sceneIdx);
+  }
+}
+
+function windowResized(){
+  resizeCanvas(windowWidth, windowHeight);
+  trailPG  = createGraphics(width, height);
+  glowPG   = createGraphics(width, height);
+  groundPG = createGraphics(width, height);
+  initStars();
+  enterScene(sceneIdx);
+}
+
+function enterScene(i){
+  sceneStart = millis();
+  trailPG.clear(); glowPG.clear(); groundPG.clear();
+  birds = []; flowers = []; leaves = [];
+  currentVerseKey = null;
+
+  document.querySelectorAll('#sceneNav span').forEach((s, k)=> s.classList.toggle('on', k === i));
+
+  if(i === 0){
+    for(let k = 0; k < 13; k++) birds.push(new Bird());
+  }
+  if(i === 3){
+    glints = [];
+    for(let k = 0; k < 130; k++){
+      glints.push({
+        yF: random(),
+        jit: random(-1, 1),
+        len: random(7, 26),
+        ph: random(100)
+      });
+    }
+  }
+}
+
+/* =========================================================================
+   通用元素
+   ========================================================================= */
+function initStars(){
+  stars = [];
+  const n = 110;
+  for(let i = 0; i < n; i++){
+    stars.push({
+      nx: random(), ny: random(),
+      r: random(0.6, 1.8),
+      seed: random(1000),
+      depth: random(0.5, 1)
+    });
+  }
+}
+
+function drawStars(alphaMax, ySpan){
+  noStroke();
+  const m = millis();
+  for(const s of stars){
+    const tw = 0.3 + 0.7 * noise(s.seed, m * 0.0004);
+    fill(255, 244, 224, alphaMax * tw);
+    circle(s.nx * width, s.ny * height * ySpan, s.r);
+  }
+}
+
+function drawSky(stops, horizon){
+  noStroke();
+  const n = stops.length;
+  for(let i = 0; i < n - 1; i++){
+    const c0 = color(stops[i]), c1 = color(stops[i + 1]);
+    const y0 = map(i, 0, n - 1, 0, horizon);
+    const y1 = map(i + 1, 0, n - 1, 0, horizon);
+    const step = max(3, (y1 - y0) / 14);
+    for(let y = y0; y < y1; y += step){
+      const f = (y - y0) / max(1, (y1 - y0));
+      fill(lerpColor(c0, c1, f));
+      rect(0, y, width, step + 1);
+    }
+  }
+  fill(stops[n - 1]);
+  rect(0, horizon - 1, width, height - horizon + 2);
+}
+
+function drawMoon(x, y, r){
+  noStroke();
+  for(let i = 7; i >= 1; i--){
+    fill(255, 240, 205, 6);
+    circle(x, y, r * (1 + i * 0.5));
+  }
+  fill(255, 246, 226, 230);
+  circle(x, y, r);
+  fill(255, 252, 240, 170);
+  circle(x - r * 0.14, y - r * 0.14, r * 0.8);
+}
+
+/* 用「擦除 alpha」的方式让轨迹层渐隐，避免色罩污染 */
+function fadePG(pg, amt){
+  const ctx = pg.drawingContext;
+  ctx.save();
+  ctx.globalCompositeOperation = 'destination-out';
+  pg.noStroke();
+  pg.fill(0, amt);
+  pg.rect(0, 0, pg.width, pg.height);
+  ctx.restore();
+}
+
+function updateWind(){
+  const vx = mouseX - pmouseX, vy = mouseY - pmouseY;
+  wind.x = lerp(wind.x, constrain(vx * 0.14, -5.5, 5.5), 0.07);
+  wind.y = lerp(wind.y, constrain(vy * 0.10, -3.5, 3.5), 0.07);
+  gust *= 0.945;
+}
+
+function mousePressed(){ gust = 11; }
+function touchStarted(){ gust = 11; }
+
+function easeOutCubic(x){ return 1 - pow(1 - x, 3); }
+
+/* ————— 鸟形：两翼随扑动起伏的 “∿” 笔画 ————— */
+function birdShape(x, y, s, flap, alpha){
+  noFill();
+  strokeCap(ROUND);
+  // 宽笔低透明度 = 光晕，细笔高透明度 = 主体
+  stroke(255, 214, 150, alpha * 0.16);
+  strokeWeight(s * 0.34);
+  wingPath(x, y, s, flap);
+  stroke(255, 238, 208, alpha);
+  strokeWeight(max(1.2, s * 0.11));
+  wingPath(x, y, s, flap);
+}
+
+function wingPath(x, y, s, flap){
+  const tip = flap * 0.8 + 0.1;   // 翼尖高度系数
+  beginShape();
+  vertex(x - s, y - s * tip);
+  quadraticVertex(x - s * 0.42, y - s * tip * 0.55 - s * 0.10, x, y);
+  quadraticVertex(x + s * 0.42, y - s * tip * 0.55 - s * 0.10, x + s, y - s * tip);
+  endShape();
+}
+
+/* =========================================================================
+   第一幕 · 夏天的飞鸟
+   ========================================================================= */
+class Bird{
+  constructor(){
+    this.reset();
+  }
+  reset(fromEdge){
+    this.s = random(6, 16);
+    this.x = fromEdge ? (random() < 0.5 ? -60 : width + 60) : random(width);
+    this.y = random(height * 0.12, height * 0.68);
+    this.px = this.x; this.py = this.y;
+    this.phase = random(TWO_PI);
+    this.wingSp = random(0.8, 1.3);
+    this.sp = 1.1 + this.s * 0.08;
+  }
+  update(m){
+    const a = noise(this.x * 0.0015, this.y * 0.0015, m * 0.00011) * TWO_PI * 1.7;
+    let vx = cos(a) * this.sp;
+    let vy = sin(a) * this.sp * 0.55;
+    vx += wind.x * 0.55 + gust * 0.5;
+    vy += wind.y * 0.35;
+    // 轻柔地被约束在天空带里
+    if(this.y < height * 0.10) vy += 0.3;
+    if(this.y > height * 0.72) vy -= 0.3;
+    this.px = this.x; this.py = this.y;
+    this.x += vx; this.y += vy;
+    if(this.x < -80 || this.x > width + 80 || this.y < -80 || this.y > height + 80) this.reset(true);
+  }
+  draw(m){
+    const flap = sin(m * 0.013 * this.wingSp + this.phase);
+    birdShape(this.x, this.y, this.s, flap, 215);
+  }
+  trail(){
+    trailPG.noFill();
+    trailPG.strokeCap(ROUND);
+    trailPG.stroke(255, 196, 120, 60);
+    trailPG.strokeWeight(2);
+    trailPG.line(this.px, this.py, this.x, this.y);
+  }
+}
+
+function sceneBirds(t, dur){
+  const m = millis();
+  drawSky(DUSK, height);
+  drawStars(130, 0.55);
+
+  // 暮霭：缓缓漂移的暖色薄雾带
+  noStroke();
+  for(let i = 0; i < 4; i++){
+    const cy = height * (0.30 + i * 0.11);
+    const cx = (m * 0.006 * (0.4 + i * 0.2) + i * 400) % (width + 500) - 250;
+    fill(200, 110, 90, 7 + i * 2);
+    ellipse(cx, cy, width * 0.55, height * 0.045);
+    fill(200, 110, 90, 6 + i * 2);
+    ellipse(width - cx * 0.7, cy + 30, width * 0.4, height * 0.03);
+  }
+
+  for(const b of birds){ b.update(m); b.trail(); }
+  fadePG(trailPG, 3.2);
+
+  push();
+  blendMode(ADD);
+  image(trailPG, 0, 0);
+  pop();
+
+  for(const b of birds) b.draw(m);
+}
+
+/* =========================================================================
+   第二幕 · 夏花 / 秋叶
+   ========================================================================= */
+class Flower{
+  constructor(x, y){
+    this.x = x; this.y = y;
+    this.maxR = random(28, 68) * min(1, width / 900 + 0.4);
+    this.petals = floor(random(5, 9));
+    this.rot = random(TWO_PI);
+    this.dir = random() < 0.5 ? 1 : -1;
+    this.col = color(random(FLOWER_COLORS));
+    this.born = millis();
+    this.life = random(2300, 3300);
+  }
+  update(){
+    const age = millis() - this.born;
+    if(age > this.life) return false;
+    return true;
+  }
+  draw(pg, m){
+    const age = m - this.born;
+    const grow = easeOutCubic(min(age / 650, 1));
+    const r = this.maxR * grow;
+    let alpha = 255;
+    const lifeF = age / this.life;
+    if(lifeF > 0.7) alpha = map(lifeF, 0.7, 1, 255, 0);
+
+    const sway = wind.x * 2.2 + sin(m * 0.001 + this.rot * 5) * 2;
+    pg.push();
+    pg.translate(this.x + sway, this.y);
+    pg.rotate(this.rot + m * 0.00018 * this.dir);
+    pg.noStroke();
+    for(let p = 0; p < this.petals; p++){
+      pg.push();
+      pg.rotate(p * TWO_PI / this.petals);
+      pg.fill(red(this.col), green(this.col), blue(this.col), alpha * 0.5);
+      pg.ellipse(0, -r * 0.5, r * 0.34, r * 0.6);
+      pg.pop();
+    }
+    // 花芯微光
+    for(let i = 2; i >= 0; i--){
+      pg.fill(255, 226, 170, alpha * (0.12 + i * 0.14));
+      pg.circle(0, 0, r * (0.16 + i * 0.14));
+    }
+    pg.pop();
+  }
+}
+
+class Leaf{
+  constructor(){
+    this.x = random(width);
+    this.y = -30;
+    this.s = random(9, 17);
+    // 时间基准的下落速度：约 1.05~1.4s 落地
+    this.vy = height * 0.92 / random(1050, 1400);
+    this.rot = random(TWO_PI);
+    this.vr = random(-0.02, 0.02);
+    this.ph = random(TWO_PI);
+    this.col = color(random(LEAF_COLORS));
+  }
+  update(m){
+    const dt = min(deltaTime, 40);
+    this.y += this.vy * dt * (1 + gust * 0.06);
+    this.x += (sin(m * 0.0013 + this.ph) * 0.55
+            + noise(this.x * 0.002, m * 0.0002) * 0.8 - 0.4
+            + wind.x * 1.6 + gust * 0.9) * dt / 16.7;
+    this.rot += (this.vr + sin(m * 0.002 + this.ph) * 0.012) * dt / 16.7;
+    return this.y < groundYAt(this.x) - 2;
+  }
+  land(){
+    const gy = groundYAt(this.x);
+    groundPG.noStroke();
+    groundPG.fill(12, 9, 16, 215);
+    groundPG.ellipse(this.x, gy, this.s * 0.85, this.s * 0.4);
+  }
+  draw(){
+    push();
+    translate(this.x, this.y);
+    rotate(this.rot);
+    noStroke();
+    fill(red(this.col), green(this.col), blue(this.col), 235);
+    beginShape();
+    vertex(0, -this.s);
+    bezierVertex(this.s * 0.75, -this.s * 0.3, this.s * 0.75, this.s * 0.35, 0, this.s);
+    bezierVertex(-this.s * 0.75, this.s * 0.35, -this.s * 0.75, -this.s * 0.3, 0, -this.s);
+    endShape(CLOSE);
+    // 叶脉
+    stroke(60, 32, 18, 130);
+    strokeWeight(1);
+    line(0, -this.s * 0.8, 0, this.s * 0.8);
+    pop();
+  }
+}
+
+function groundYAt(x){
+  return height * 0.87 + noise(x * 0.003, 7.7) * height * 0.055;
+}
+
+function sceneBloom(t, dur){
+  const m = millis();
+  drawSky(BLOOM, height * 0.9);
+  drawStars(80, 0.45);
+
+  // ——— 花期：快速连续绽放 ———
+  if(t < dur * 0.42 && m - lastFlowerAt > 95 && flowers.length < 16){
+    lastFlowerAt = m;
+    for(let k = 0; k < 2; k++){
+      let fx = random(width * 0.06, width * 0.94);
+      let fy = random(height * 0.30, height * 0.74);
+      // 避开中央诗句区
+      if(abs(fx - width / 2) < width * 0.24 && abs(fy - height * 0.40) < height * 0.14){
+        fx = width - fx;
+      }
+      flowers.push(new Flower(fx, fy));
+    }
+  }
+
+  // ——— 叶期：35% 起、62% 止（保证落地化墨后再切幕）———
+  if(t > dur * 0.35 && t < dur * 0.62 && m - lastLeafAt > 130){
+    lastLeafAt = m;
+    leaves.push(new Leaf());
+  }
+
+  // 花火层（加色发光）
+  flowers = flowers.filter(f => f.update());
+  for(const f of flowers) f.draw(glowPG, m);
+  push();
+  blendMode(ADD);
+  image(glowPG, 0, 0);
+  pop();
+
+  // 远山剪影 + 地面
+  noStroke();
+  fill(22, 15, 32);
+  beginShape();
+  vertex(0, height);
+  for(let x = 0; x <= width + 20; x += 22){
+    vertex(x, groundYAt(x));
+  }
+  vertex(width, height);
+  endShape(CLOSE);
+
+  // 落叶
+  leaves = leaves.filter(l => {
+    const alive = l.update(m);
+    if(alive){ l.draw(); return true; }
+    l.land();       // 落地 → 化为墨点（尘归尘）
+    return false;
+  });
+
+  // 墨点层叠在最上（不发光）
+  image(groundPG, 0, 0);
+}
+
+/* =========================================================================
+   第三幕 · 痕迹
+   ========================================================================= */
+function sceneTrace(t, dur){
+  const m = millis();
+  drawSky(NIGHT, height);
+  drawStars(190, 0.62);
+  drawMoon(width * 0.78, height * 0.20, min(40, width * 0.035));
+
+  // 孤鸟横越长空（贯穿整幕）
+  const flightT = map(t, 60, dur - 220, 0, 1.05);
+  if(flightT > 0 && flightT < 1){
+    const bx = map(flightT, 0, 1, -80, width + 80);
+    const by = height * 0.34 + sin(t * 0.0009 + flightT * TWO_PI * 1.5) * height * 0.05;
+    const flap = sin(m * 0.011);
+
+    // 光痕：随时间流逝，淡出越来越快 → 轨迹越来越短，直至无痕
+    trailPG.noFill();
+    trailPG.strokeCap(ROUND);
+    trailPG.stroke(255, 216, 150, 150);
+    trailPG.strokeWeight(2.6);
+    const prevX = map(max(0, flightT - 0.012), 0, 1, -80, width + 80);
+    const prevY = height * 0.34 + sin(t * 0.0009 + (flightT - 0.012) * TWO_PI * 1.5) * height * 0.05;
+    trailPG.line(prevX, prevY, bx, by);
+
+    fadePG(trailPG, map(t, 0, dur, 1.6, 15));
+    birdShape(bx, by, 15, flap, 235);
+  } else {
+    fadePG(trailPG, 12);   // 鸟已远去，痕迹继续消散
+  }
+
+  push();
+  blendMode(ADD);
+  image(trailPG, 0, 0);
+  pop();
+}
+
+/* =========================================================================
+   第四幕 · 海与天
+   ========================================================================= */
+function sceneSea(t, dur){
+  const m = millis();
+  const horizon = height * 0.52;
+  const moonX = width * 0.62, moonY = height * 0.17;
+
+  drawSky(SEASKY, horizon);
+  drawStars(170, 0.5);
+  drawMoon(moonX, moonY, min(34, width * 0.03));
+
+  // ——— 层浪（由远及近）———
+  const cols = ['#4a5480', '#3c4872', '#2e3a63', '#232e54', '#182246', '#0f1733'];
+  const nL = cols.length;
+  for(let i = 0; i < nL; i++){
+    const baseY = horizon + 6 + (i / nL) * (height - horizon) * 1.25;
+    const amp = 2.5 + i * 2.4 + gust * 1.6;
+    const freq = 0.0058 - i * 0.0005;
+    const sp = 0.00045 + i * 0.00008;
+    fill(cols[i]);
+    noStroke();
+    beginShape();
+    vertex(-10, height + 10);
+    for(let x = -10; x <= width + 20; x += 18){
+      const y = baseY
+        + sin(x * freq + m * sp + i * 1.7) * amp
+        + noise(x * 0.0018, i * 3.1, m * 0.00012) * amp * 0.9;
+      vertex(x, y);
+    }
+    vertex(width + 10, height + 10);
+    endShape(CLOSE);
+  }
+
+  // ——— 月光在水面碎成波光 ———
+  push();
+  blendMode(ADD);
+  noStroke();
+  for(const g of glints){
+    const y = horizon + 4 + g.yF * (height - horizon) * 0.98;
+    const spread = 26 + g.yF * width * 0.24;
+    const x = moonX + g.jit * spread;
+    const tw = 0.25 + 0.75 * noise(g.ph, m * 0.0022);
+    const w = g.len * (1 + g.yF * 1.8);
+    fill(255, 212, 145, (18 + 120 * tw) * (0.35 + g.yF * 0.65));
+    rect(x - w / 2, y, w, 1.7);
+  }
+  pop();
+
+  // ——— 终幕：一只归鸟掠向海平线，回到第一幕 ———
+  if(t > dur * 0.5){
+    const ft = (t - dur * 0.5) / (dur * 0.5);
+    if(ft < 1){
+      const bx = lerp(width * 0.22, width * 0.9, easeOutCubic(ft));
+      const by = lerp(height * 0.30, horizon * 0.86, easeOutCubic(ft));
+      const s = lerp(11, 3, ft);
+      const a = lerp(230, 90, ft);
+      birdShape(bx, by, s, sin(m * 0.016), a);
+    }
+  }
+}
+
+/* =========================================================================
+   转场 · 诗句 · 交互
+   ========================================================================= */
+function drawTransition(t, dur){
+  const fadeIn = 340, fadeOut = 340;
+  let a = 0;
+  if(t < fadeIn) a = 1 - t / fadeIn;
+  else if(t > dur - fadeOut) a = (t - (dur - fadeOut)) / fadeOut;
+  a = constrain(a, 0, 1);
+  if(a > 0.005){
+    noStroke();
+    fill(8, 10, 22, a * 240);
+    rect(0, 0, width, height);
+  }
+}
+
+function updateVerseDOM(t, scene){
+  const verseEl  = document.getElementById('verse');
+  const enEl     = document.getElementById('verseEn');
+  const subEl    = document.getElementById('verseSub');
+
+  const vs = scene.verses;
+  let idx = 0;
+  for(let i = 0; i < vs.length; i++) if(t >= vs[i].t) idx = i;
+  const v = vs[idx];
+
+  if(currentVerseKey !== sceneIdx + ':' + idx){
+    currentVerseKey = sceneIdx + ':' + idx;
+    verseEl.innerHTML = v.zh;
+    enEl.innerHTML = v.en.replace(/。/g, '.');
+  }
+
+  const vStart = v.t + 260;
+  const vEnd = (idx < vs.length - 1) ? vs[idx + 1].t - 60 : scene.dur - 400;
+  let o = 0;
+  if(t > vStart) o = min((t - vStart) / 420, 1);
+  if(t > vEnd - 400) o = min(o, max((vEnd - t) / 400, 0));
+  o = constrain(o, 0, 1);
+
+  verseEl.style.opacity = (o * 0.96).toFixed(3);
+  enEl.style.opacity = (o * 0.6).toFixed(3);
+  subEl.style.opacity = (o * 0.42).toFixed(3);
+}
+
+/* =========================================================================
+   胶片颗粒
+   ========================================================================= */
+let grainX = 0, grainY = 0;
+function makeGrain(){
+  const gc = document.createElement('canvas');
+  gc.width = gc.height = 160;
+  const g = gc.getContext('2d');
+  const img = g.createImageData(160, 160);
+  for(let i = 0; i < img.data.length; i += 4){
+    const v = 110 + Math.random() * 80;
+    img.data[i] = img.data[i + 1] = img.data[i + 2] = v;
+    img.data[i + 3] = Math.random() * 34;
+  }
+  g.putImageData(img, 0, 0);
+  document.getElementById('grain').style.backgroundImage = `url(${gc.toDataURL()})`;
+}
+function jitterGrain(){
+  grainX = Math.floor(Math.random() * 160);
+  grainY = Math.floor(Math.random() * 160);
+  document.getElementById('grain').style.backgroundPosition = `${grainX}px ${grainY}px`;
+}
+</script>
+</body>
+</html>
