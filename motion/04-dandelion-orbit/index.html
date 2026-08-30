@@ -1,0 +1,695 @@
+<!doctype html>
+<html lang="zh-CN" data-page-node-id="oF0g1Mbhlno7s2EMDPEEE3">
+  <head data-page-node-id="P76KYrEAdutoLfJbH0Potz">
+    <meta charset="UTF-8" data-page-node-id="jCFVKkoQU2JfoKfM0BBKlg" />
+    <title>环形诗句 · 蒲公英的约定</title>
+    <script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400&family=Cormorant+Garamond:ital@1&display=swap"
+      rel="stylesheet"
+      data-page-node-id="vDWLUIGPpen6kDR2C2dxn8"
+    />
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #7fb2e0;
+        overflow: hidden;
+      }
+      canvas {
+        display: block;
+      }
+      /* ★★★ 右下角静态歌词（DOM 层排版）控制处 ★★★
+         文字内容在 CONFIG.corner.lines 里改；淡入淡出时刻在 CONFIG.corner。
+         letter-spacing 会让末字后多出一段空隙，右对齐时用等量负 margin-right 抵消。 */
+      #corner-lyrics {
+        position: fixed;
+        right: 80px;
+        bottom: 220px;
+        z-index: 10;
+        pointer-events: none;
+        opacity: 0;
+        text-align: right;
+        font-family: "Noto Serif SC", "Songti SC", serif;
+        font-weight: 300;
+        font-size: 16px;
+        line-height: 2.2;
+        letter-spacing: 0.3em;
+        margin-right: -0.3em;
+        color: #fff;
+        text-shadow: 0 1px 6px rgba(24, 52, 104, 0.55);
+      }
+      #corner-lyrics p {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body data-page-node-id="68ZHfTcbLjDdf3dYICsnOF">
+    <div id="corner-lyrics" aria-hidden="true"></div>
+    <script>
+      /* ═════════════ 可配置区（事实来源见 prompt.md） ═════════════ */
+      const CONFIG = {
+        /* 新海诚风蓝色：天蓝 → 青蓝 → 地平线亮白，顶部暖光晕 */
+        bg: {
+          top: [38, 84, 148],
+          mid: [96, 152, 214],
+          bot: [206, 231, 249],
+          glow: [255, 244, 210],
+          glowPos: [0.72, 0.16],
+        },
+        dot: {
+          // 蒲公英绒球（圆点）
+          from: [0.14, 0.86], // 起点：左下方（比例）
+          to: [0.5, 0.5], // 终点：画面中心
+          moveTime: 1.7, // 移动耗时（秒）
+          bob: 7, // 移动途中轻微飘动幅度 px
+          swayAfter: 3.5, // 到位后随风持续轻摆幅度 px
+          fadeIn: 0.5, // 出现耗时（与茎同步，一起画上）
+          r: 8,
+          color: [255, 255, 255], // 白色绒球
+        },
+        stem: {
+          // 根茎：从左下方延伸到绒球
+          root: [0.03, 1.02], // 根部（比例，左下画外）
+          color: [255, 255, 255], // 白色茎
+          weight: 2.5,
+          alpha: 0.9,
+          fadeIn: 0.5, // 出现耗时（与绒球同步）
+          sway: 9, // 随风轻摆幅度 px（多谐波叠加）
+          swaySpeed: 1.6,
+        },
+        text: {
+          fontSize: 12,
+          color: [255, 255, 255],
+          shadow: [24, 52, 104],
+          fontCN: "'Noto Serif SC','Songti SC',serif",
+          fontEN: "'Cormorant Garamond','Times New Roman',serif",
+        },
+        /* 歌词：一行 = 一个圆环（从里往外），每行自动重复铺满整圈 */
+
+        lyrics: [
+          "小學籬笆旁的蒲公英",
+          "是記憶裡有味道的風景",
+          "午睡操場傳來蟬的聲音",
+          "多少年後也還是很好聽",
+          "因為我們等不到那流星",
+          "認真投決定命運的硬幣",
+          "將願望折紙飛機寄成信",
+          "卻不知道到底能去哪裡",
+        ],
+        enLines: [
+          // 英文环（自译补充，可删改）
+          "dandelions by the old fence,",
+          "the scented scenery of memory,",
+          "cicadas humming us back to that summer.",
+        ],
+        rings: {
+          innerRadius: 36,
+          perLine: 1, // 每行歌词铺几个相邻环（减少文字量的第一旋钮）
+          /* ★★★ 环间距（行距）控制处 ★★★
+             实际环距 gap_i = spacing × lerp(tightInner, looseOuter, i/(n-1))，
+             即最内环距 = spacing×tightInner，最外环距 = spacing×looseOuter。
+             调小 spacing → 环更密、圆盘更紧凑（像一个整体）；
+             tightInner×spacing < 字号时，内环之间会相互重叠。 */
+          spacing: 12, // 环与环的间距（基准，实际按 tightInner→looseOuter 递进）
+          tightInner: 0.4, // 内环距系数（12×0.4≈4.8px ≪ 字号12 → 内环大幅重叠）
+          looseOuter: 1.15, // 外环距系数（12×1.15≈13.8px，仍小于字号 → 整盘成密实团）
+          margin: 40,
+          repeat: true, // 行文字自动重复铺满整圈
+          startAngle: -90,
+          /* ★★★ 字与字间距控制处 ★★★
+             arcGap 是每两个字之间间距的随机源（px），铺满整圈后归一化。
+             调小 → 每环容纳更多字符、字距更紧；调大 → 更稀疏。 */
+          arcGap: [7, 13],
+          rotSpeed: 2.0,
+          /* ★★★ 每个字符上下左右随机摆动幅度控制处 ★★★
+             amp = 摆动幅度随机区间（px），rot = 角度摆动幅度（弧度）。 */
+          sway: { amp: [1.6, 3.4], speed: [1.6, 2.8], rot: 0.08 },
+          stagger: {
+            angle: true,
+            radial: 4,
+            alternate: true,
+            speedJit: 0.5,
+          },
+        },
+        line: { weight: 0.8, color: [255, 255, 255], alpha: 0.38 },
+        fly: {
+          at: 2.0, // 主力飘散开始时刻（秒）
+          early: [0.7, 1.6], // 提前飘散窗口：移动途中少量脱落
+          earlyRatio: 0.16, // 提前脱落的字符比例（少量）
+          detachSpan: 3.5, // 期望脱落时刻的散布窗口（实际放行受批次与上限控制）
+          batchSize: 30, // 每批放行的字符数（分批错峰）
+          batchGap: 0.15, // 批次间隔（秒）
+          maxConcurrent: 380, // 同时处于脱落/飘散状态的元素上限
+          shrink: 0.45, // 脱落前连线缩短耗时（秒）
+          vx: [3, 5],
+          vy: [-12, -2],
+          spread: 45,
+          wind: {
+            // 风：把字符带向画面远方
+            max: 7, // 最大风速 px/帧
+            ramp: 2.0, // 风速爬升时间（秒）
+            meander: 0.9, // 蛇形飘摆强度
+            lift: -0.035, // 浮力（负=上升）
+          },
+          gravity: 0.02,
+          spin: 3,
+          fade: [1.8, 2.9], // 每个字符释放后的淡出窗口（秒）
+          drag: { follow: 0.008, gravity: 0.1, damp: 0.94 },
+        },
+        loop: { enable: true, after: 8, fadeOut: 1.0 },
+        corner: {
+          // ★ 右下角静态歌词（DOM 层排版，不参与飘散），改 lines 即可换句
+          lines: [
+            "小學籬笆旁的蒲公英", "是記憶裡有味道的風景",
+            "── 蒲公英的約定"
+          ],
+          fadeIn: [1.2, 3.2], // 淡入起止（秒）
+          fadeOutAt: 10.0, // 开始淡出时刻（与落幕纱幕同步）
+        },
+        seed: 20260830,
+        caption: "《蒲公英的约定》 词：方文山 · Dandelion's Promise",
+      };
+      /* ════════════════════════════════════════════════════════════ */
+
+      const D2R = Math.PI / 180;
+
+      new p5((p) => {
+        let chars = [],
+          ringsMeta = [],
+          armQueue = [], // 待放行队列（按期望脱落时刻排序）
+          armPtr = 0,
+          lastArmT = -1,
+          tSec = 0,
+          started = false;
+        const glyphCache = new Map(); // 字形精灵缓存：fillText → drawImage
+        let skyCache = null; // 天空背景离屏缓存
+
+        const clamp01 = (t) => (t < 0 ? 0 : t > 1 ? 1 : t);
+        const sstep = (a, b, x) => {
+          const t = clamp01((x - a) / (b - a));
+          return t * t * (3 - 2 * t);
+        };
+        const lerp = (a, b, k) => a + (b - a) * k;
+
+        /* —— 字形精灵：唯一（字符×字体×字号）组合只渲染一次，逐帧 drawImage 复用 —— */
+        function glyphSprite(ch, font, size, en) {
+          const key = ch + "|" + font + "|" + size;
+          let s = glyphCache.get(key);
+          if (s) return s;
+          const cv = document.createElement("canvas");
+          const g = cv.getContext("2d");
+          const cssFont = `${en ? "italic " : ""}${size}px ${font}`;
+          g.font = cssFont;
+          const w = Math.ceil(g.measureText(ch).width) + 8;
+          const h = Math.ceil(size * 1.6) + 8;
+          cv.width = w;
+          cv.height = h;
+          g.font = cssFont; // 改尺寸后需重设
+          g.textAlign = "center";
+          g.textBaseline = "middle";
+          const SC = CONFIG.text.shadow,
+            TC = CONFIG.text.color;
+          g.fillStyle = `rgba(${SC.join(",")},0.5)`;
+          g.fillText(ch, w / 2 + 1.1, h / 2 + 1.4); // 深蓝错位底（预烘焙）
+          g.fillStyle = `rgb(${TC.join(",")})`;
+          g.fillText(ch, w / 2, h / 2);
+          s = { cv, ox: w / 2, oy: h / 2 };
+          glyphCache.set(key, s);
+          return s;
+        }
+
+        /* —— 绒球位置：从左下方移动到中心，途中飘动；到位后随风持续轻摆 —— */
+        function dotPos(t) {
+          const D = CONFIG.dot;
+          const k = sstep(0, 1, clamp01(t / D.moveTime));
+          const wob = 1 - k; // 移动途中：较快飘动
+          const x =
+            lerp(D.from[0] * p.width, D.to[0] * p.width, k) +
+            Math.sin(t * 4.2) * D.bob * wob +
+            Math.sin(t * 1.25) * D.swayAfter * k; // 到位后：缓慢轻摆
+          const y =
+            lerp(D.from[1] * p.height, D.to[1] * p.height, k) +
+            Math.sin(t * 5.7 + 1.3) * D.bob * 0.7 * wob +
+            Math.sin(t * 1.6 + 0.8) * D.swayAfter * 0.7 * k;
+          return [x, y];
+        }
+
+        /* —— 布局：每行文字自动重复铺满整圈，环间参差交错 —— */
+        function build() {
+          chars = [];
+          ringsMeta = [];
+          armQueue = [];
+          armPtr = 0;
+          lastArmT = -1;
+          glyphCache.clear(); // 字体加载后重建时，精灵需用新字体重烘焙
+          p.randomSeed(CONFIG.seed);
+          const R = CONFIG.rings,
+            S = R.stagger,
+            F = CONFIG.fly;
+          const srcLines = [
+            ...CONFIG.lyrics.map((t) => ({ text: t, en: false })),
+            ...CONFIG.enLines.map((t) => ({ text: t, en: true })),
+          ];
+          // 每行铺 perLine 个相邻环：环数翻倍，填满整个圆盘
+          const lines = [];
+          srcLines.forEach((l) => {
+            for (let k = 0; k < Math.max(1, R.perLine); k++) lines.push(l);
+          });
+          const n = lines.length;
+          const maxR = Math.min(p.width, p.height) / 2 - R.margin;
+          // 内紧外松的递进行距：gap_i = spacing × lerp(tightInner, looseOuter, i/(n-1))
+          // 内环距可小于字号 → 环与环部分重叠；总高超过画布时整体压缩
+          const gapOf = (i) =>
+            R.spacing *
+            lerp(R.tightInner, R.looseOuter, n > 1 ? i / (n - 1) : 0);
+          let totalSpan = 0;
+          for (let i = 1; i < n; i++) totalSpan += gapOf(i);
+          const compress =
+            totalSpan > 0 ? Math.min(1, (maxR - R.innerRadius) / totalSpan) : 1;
+          const radii = [R.innerRadius];
+          for (let i = 1; i < n; i++)
+            radii.push(radii[i - 1] + gapOf(i) * compress);
+
+          let idx = 0;
+          lines.forEach((line, ri) => {
+            const radius = radii[ri];
+            const font = line.en ? CONFIG.text.fontEN : CONFIG.text.fontCN;
+            let size = CONFIG.text.fontSize;
+            const glyphs = [...line.text].filter((ch) => ch.trim() !== "");
+            if (!glyphs.length) return;
+
+            p.textFont(font);
+            p.textSize(size);
+            const C = 2 * Math.PI * radius;
+            let units = glyphs.map((ch) => ({
+              ch,
+              w: Math.max(p.textWidth(ch), 1.5),
+            }));
+            const passW =
+              units.reduce((a, u) => a + u.w, 0) + units.length * R.arcGap[0];
+            if (passW > C * 0.97) {
+              // 单遍即超周长：缩字号适配本环
+              size = Math.max(7, (size * C * 0.97) / passW);
+              p.textSize(size);
+              units = glyphs.map((ch) => ({
+                ch,
+                w: Math.max(p.textWidth(ch), 1.5),
+              }));
+            }
+
+            // 重复该行直到铺满整圈（至少一整遍），字距取 arcGap 随机
+            let seq = [],
+              total = 0,
+              ui = 0,
+              guard = 0;
+            while (guard++ < 600) {
+              const u = units[ui % units.length];
+              const g = p.random(R.arcGap[0], R.arcGap[1]);
+              if (total + g + u.w > C && seq.length >= units.length) break;
+              seq.push({ ch: u.ch, w: u.w, g });
+              total += g + u.w;
+              ui++;
+              if (!R.repeat && seq.length >= units.length) break;
+            }
+            // 归一化字距：Σ(字宽+字距) = 周长，首尾严丝合缝
+            const gSum = seq.reduce((a, s) => a + s.g, 0);
+            const gScale = (gSum + (C - total)) / gSum;
+            seq.forEach((s) => (s.g *= Math.max(gScale, 0.15)));
+
+            // 环级参差：随机起始角 + 反向/异速旋转
+            ringsMeta.push({
+              off: S.angle ? p.random(0, 360) * D2R : 0,
+              dir: S.alternate ? (ri % 2 === 0 ? 1 : -1) : 1,
+              spd: 1 + p.random(-S.speedJit, S.speedJit),
+            });
+
+            let ang = R.startAngle * D2R;
+            seq.forEach((s) => {
+              ang += s.g / radius;
+              const aMid = ang + s.w / 2 / radius;
+              // 少量字符在绒球移动途中提前脱落，其余在主力窗口慢慢飘散
+              const early = p.random() < F.earlyRatio;
+              chars.push({
+                ch: s.ch,
+                ri,
+                idx: idx++,
+                radius,
+                size,
+                font,
+                sprite: glyphSprite(s.ch, font, size, line.en),
+                ang: aMid,
+                radJit: p.random(-S.radial, S.radial),
+                detAt: early
+                  ? p.random(F.early[0], F.early[1])
+                  : F.at + p.random(F.detachSpan),
+                state: 0, // 0 附着 / 1 连线缩短中 / 2 飘散中 / 3 已消散
+                armAt: 0,
+                swayPh: p.random(0, Math.PI * 2), // 微摆：相位/幅度/速度各自随机
+                swayAmp: p.random(R.sway.amp[0], R.sway.amp[1]),
+                swaySpd: p.random(R.sway.speed[0], R.sway.speed[1]),
+                fadeJit: p.random(0, 0.25), // 同场淡入的微小参差（不分环）
+                x: 0,
+                y: 0,
+                rot: aMid + Math.PI / 2,
+                vx: 0,
+                vy: 0,
+                vr: 0,
+                fe: { x: 0, y: 0, vx: 0, vy: 0 },
+                flyT: 0,
+                alpha: 1,
+              });
+              ang += s.w / radius;
+            });
+          });
+          // 放行队列：按期望脱落时刻排序，实际放行由批次+并发上限控制
+          armQueue = chars.slice().sort((a, b) => a.detAt - b.detAt);
+        }
+
+        /* —— 释放：赋随机初速度，方向整体随机偏转 —— */
+        function release(c) {
+          const F = CONFIG.fly;
+          const vx = p.random(F.vx[0], F.vx[1]);
+          const vy = p.random(F.vy[0], F.vy[1]);
+          const s = p.random(-F.spread, F.spread) * D2R;
+          c.vx = vx * Math.cos(s) - vy * Math.sin(s);
+          c.vy = vx * Math.sin(s) + vy * Math.cos(s);
+          c.vr = p.random(-1, 1) * F.spin * D2R;
+          c.state = 2;
+          c.flyT = 0;
+        }
+
+        p.setup = () => {
+          p.createCanvas(p.windowWidth, p.windowHeight);
+          p.textAlign(p.CENTER, p.CENTER);
+          p.frameRate(60);
+          renderSky();
+          build();
+          // 右下角静态歌词：内容由 CONFIG.corner 提供
+          const cornerEl = document.getElementById("corner-lyrics");
+          if (cornerEl) {
+            cornerEl.innerHTML = CONFIG.corner.lines
+              .map((l) => `<p>${l}</p>`)
+              .join("");
+          }
+          if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(() => {
+              if (!started) build();
+            });
+          }
+        };
+
+        p.windowResized = () => {
+          p.resizeCanvas(p.windowWidth, p.windowHeight);
+          renderSky();
+          if (!started) build();
+        };
+
+        /* —— 天空离屏缓存：渐变只画一次，逐帧 drawImage 复用 —— */
+        function renderSky() {
+          skyCache = document.createElement("canvas");
+          skyCache.width = p.width;
+          skyCache.height = p.height;
+          const ctx = skyCache.getContext("2d"),
+            B = CONFIG.bg;
+          const g = ctx.createLinearGradient(0, 0, 0, p.height);
+          g.addColorStop(0, `rgb(${B.top.join(",")})`);
+          g.addColorStop(0.55, `rgb(${B.mid.join(",")})`);
+          g.addColorStop(1, `rgb(${B.bot.join(",")})`);
+          ctx.fillStyle = g;
+          ctx.fillRect(0, 0, p.width, p.height);
+          const gx = p.width * B.glowPos[0],
+            gy = p.height * B.glowPos[1];
+          const gr = Math.min(p.width, p.height) * 0.75;
+          const rg = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+          rg.addColorStop(0, `rgba(${B.glow.join(",")},0.55)`);
+          rg.addColorStop(0.4, `rgba(${B.glow.join(",")},0.18)`);
+          rg.addColorStop(1, `rgba(${B.glow.join(",")},0)`);
+          ctx.fillStyle = rg;
+          ctx.fillRect(0, 0, p.width, p.height);
+        }
+
+        function drawSky() {
+          p.drawingContext.drawImage(skyCache, 0, 0);
+        }
+
+        /* —— 根茎：左下画外 → 绒球，贝塞尔曲线 + 多谐波轻摆 —— */
+        function drawStem(cx, cy, t) {
+          const S = CONFIG.stem,
+            ctx = p.drawingContext;
+          const rx = S.root[0] * p.width,
+            ry = S.root[1] * p.height;
+          // 两个谐波叠加：主摆 + 高频轻颤，摆幅沿茎向顶端递增
+          const sw1 =
+            Math.sin(t * S.swaySpeed) * S.sway +
+            Math.sin(t * S.swaySpeed * 2.7 + 0.7) * S.sway * 0.45;
+          const sw2 =
+            Math.sin(t * S.swaySpeed + 1.1) * S.sway * 0.6 +
+            Math.sin(t * S.swaySpeed * 2.2 + 2.3) * S.sway * 0.3;
+          ctx.save();
+          ctx.strokeStyle = `rgba(${S.color.join(",")},${S.alpha * clamp01(t / S.fadeIn)})`;
+          ctx.lineWidth = S.weight;
+          ctx.lineCap = "round";
+          ctx.beginPath();
+          ctx.moveTo(rx, ry);
+          ctx.bezierCurveTo(
+            rx + (cx - rx) * 0.18 + sw2 * 0.35,
+            ry + (cy - ry) * 0.3,
+            cx - (cx - rx) * 0.12 + sw1,
+            cy + (ry - cy) * 0.18 + sw2 * 0.25,
+            cx,
+            cy,
+          );
+          ctx.stroke();
+          ctx.restore();
+        }
+
+        p.draw = () => {
+          const dtF = Math.min(p.deltaTime, 50) / (1000 / 60);
+          tSec += p.deltaTime / 1000;
+          const F = CONFIG.fly,
+            L = CONFIG.loop;
+
+          const loopTotal = F.at + L.after + L.fadeOut;
+          if (L.enable && tSec >= loopTotal) {
+            tSec = 0;
+            started = false;
+            build();
+          }
+          if (tSec >= F.at) started = true;
+
+          const [cx, cy] = dotPos(tSec);
+          drawSky();
+          drawStem(cx, cy, tSec);
+
+          /* —— 强制放行保险：距落幕不足「最长淡出+缩线+1s」时，一次性放行
+             所有仍附着的字符，保证循环重置前完全飘散（正常情况不触发） —— */
+          const deadline = loopTotal - (F.fade[1] + F.shrink + 1.0);
+          if (tSec >= deadline) {
+            while (armPtr < armQueue.length) {
+              const c = armQueue[armPtr++];
+              if (c.state === 0) {
+                c.state = 1;
+                c.armAt = tSec;
+              }
+            }
+          }
+
+          /* —— 分批错峰放行：每 batchGap 秒放行一批，受 maxConcurrent 上限约束 —— */
+          if (tSec - lastArmT >= F.batchGap) {
+            lastArmT = tSec;
+            let active = 0;
+            for (const c of chars) {
+              if (c.state === 1 || (c.state === 2 && c.alpha > 0)) active++;
+            }
+            let quota = F.batchSize;
+            while (
+              quota > 0 &&
+              armPtr < armQueue.length &&
+              armQueue[armPtr].detAt <= tSec &&
+              active < F.maxConcurrent
+            ) {
+              const c = armQueue[armPtr++];
+              c.state = 1;
+              c.armAt = tSec;
+              active++;
+              quota--;
+            }
+          }
+
+          /* —— 更新字符（状态机：0 附着 → 1 缩短 → 2 飘散 → 3 消散） —— */
+          for (const c of chars) {
+            if (c.state === 3) continue;
+            if (c.state === 0) {
+              // 附着在环上（跟随绒球移动、缓转），每朵字符独立微微摇摆
+              const meta = ringsMeta[c.ri];
+              const rr =
+                tSec * CONFIG.rings.rotSpeed * meta.dir * meta.spd * D2R;
+              const a = c.ang + meta.off + rr;
+              const rad = c.radius + c.radJit;
+              const swx = Math.sin(tSec * c.swaySpd + c.swayPh) * c.swayAmp;
+              const swy =
+                Math.cos(tSec * c.swaySpd * 0.83 + c.swayPh * 1.7) *
+                c.swayAmp *
+                0.8;
+              c.x = cx + Math.cos(a) * rad + swx;
+              c.y = cy + Math.sin(a) * rad + swy;
+              c.rot =
+                a +
+                Math.PI / 2 +
+                Math.sin(tSec * c.swaySpd * 0.7 + c.swayPh) *
+                  CONFIG.rings.sway.rot;
+              c.fe.x = cx;
+              c.fe.y = cy;
+              c.fe.vx = 0;
+              c.fe.vy = 0;
+              // 所有环与绒球/茎同时出现（仅字符级微小参差）
+              c.alpha = sstep(0.1 + c.fadeJit * 0.6, 0.5 + c.fadeJit * 0.6, tSec);
+            } else if (c.state === 1) {
+              const k = sstep(0, 1, (tSec - c.armAt) / F.shrink);
+              // 字符仍在环上（轻颤），连线自由端从圆点滑向字符 → 变短
+              const meta = ringsMeta[c.ri];
+              const rr =
+                tSec * CONFIG.rings.rotSpeed * meta.dir * meta.spd * D2R;
+              const a = c.ang + meta.off + rr;
+              const rad = c.radius + c.radJit;
+              c.x =
+                cx + Math.cos(a) * rad + Math.sin(tSec * 30 + c.idx) * 1.5 * k;
+              c.y =
+                cy + Math.sin(a) * rad + Math.cos(tSec * 26 + c.idx) * 1.5 * k;
+              c.rot = a + Math.PI / 2;
+              c.fe.x = lerp(cx, c.x, k);
+              c.fe.y = lerp(cy, c.y, k);
+              c.fe.vx = 0;
+              c.fe.vy = 0;
+              if (k >= 1) release(c); // 缩短完成 → 散开
+            } else if (c.state === 2) {
+              c.flyT += p.deltaTime / 1000;
+              const W = F.wind;
+              const windX = W.max * sstep(0, W.ramp, c.flyT); // 风速渐强 → 飘向远方
+              c.vx += (windX - c.vx) * 0.045 * dtF;
+              c.vy +=
+                (Math.sin(c.flyT * 2.2 + c.idx * 1.7) * W.meander * 0.06 +
+                  W.lift +
+                  F.gravity) *
+                dtF;
+              c.vy *= Math.pow(0.986, dtF);
+              c.x += c.vx * dtF;
+              c.y += c.vy * dtF;
+              c.rot += c.vr * dtF;
+              // 自由端被字符拖着飞：弹簧滞后 + 重力 + 阻尼
+              const D = F.drag;
+              c.fe.vx += (c.x - c.fe.x) * D.follow * dtF;
+              c.fe.vy += (c.y - c.fe.y) * D.follow * dtF + D.gravity * dtF;
+              const damp = Math.pow(D.damp, dtF);
+              c.fe.vx *= damp;
+              c.fe.vy *= damp;
+              c.fe.x += c.fe.vx * dtF;
+              c.fe.y += c.fe.vy * dtF;
+              c.alpha = 1 - sstep(F.fade[0], F.fade[1], c.flyT);
+              if (c.alpha <= 0) {
+                c.alpha = 0;
+                c.state = 3; // 已消散：后续帧跳过
+              }
+            }
+          }
+
+          /* —— 连线（自由端 → 字符中心）：按透明度分桶合批，每桶一次 stroke —— */
+          const LC = CONFIG.line;
+          const lctx = p.drawingContext;
+          const buckets = new Map();
+          for (const c of chars) {
+            if (c.alpha <= 0) continue;
+            const a = Math.round(LC.alpha * c.alpha * 20) / 20; // 0.05 步长分桶
+            if (a <= 0) continue;
+            let arr = buckets.get(a);
+            if (!arr) {
+              arr = [];
+              buckets.set(a, arr);
+            }
+            arr.push(c);
+          }
+          lctx.save();
+          lctx.lineWidth = LC.weight;
+          for (const [a, arr] of buckets) {
+            lctx.strokeStyle = `rgba(${LC.color.join(",")},${a})`;
+            lctx.beginPath();
+            for (const c of arr) {
+              lctx.moveTo(c.fe.x, c.fe.y);
+              lctx.lineTo(c.x, c.y);
+            }
+            lctx.stroke();
+          }
+          lctx.restore();
+
+          /* —— 绒球（圆点，弹性出现 + 光晕） —— */
+          const pop = 1 + 0.3 * Math.sin(clamp01(tSec / 0.6) * Math.PI);
+          const dr = CONFIG.dot.r * pop;
+          const DC = CONFIG.dot.color,
+            dIn = clamp01(tSec / CONFIG.dot.fadeIn);
+          const dctx = p.drawingContext;
+          p.noStroke();
+          p.fill(DC[0], DC[1], DC[2], 46 * dIn);
+          p.circle(cx, cy, dr * 5);
+          p.fill(DC[0], DC[1], DC[2], 110 * dIn);
+          p.circle(cx, cy, dr * 2.4);
+          // 白色主体 + 深蓝柔影，浅色地平线上仍清晰
+          dctx.shadowColor = `rgba(${CONFIG.text.shadow.join(",")},${0.5 * dIn})`;
+          dctx.shadowBlur = 8;
+          p.fill(DC[0], DC[1], DC[2], 255 * dIn);
+          p.circle(cx, cy, dr * 2);
+          dctx.shadowBlur = 0;
+
+          /* —— 字符：预烘焙精灵 drawImage（含错位底），无 fillText/shadow 开销 —— */
+          const ctx = p.drawingContext;
+          for (const c of chars) {
+            if (c.alpha <= 0) continue;
+            ctx.save();
+            ctx.translate(c.x, c.y);
+            ctx.rotate(c.rot);
+            ctx.globalAlpha = c.alpha;
+            ctx.drawImage(c.sprite.cv, -c.sprite.ox, -c.sprite.oy);
+            ctx.restore();
+          }
+
+          /* —— 署名 —— */
+          const SC = CONFIG.text.shadow;
+          p.push();
+          p.textFont(CONFIG.text.fontEN);
+          p.textStyle(p.ITALIC);
+          p.textSize(13);
+          p.textAlign(p.CENTER, p.BOTTOM);
+          p.fill(255, 255, 255, 90 * clamp01(tSec / 1.2));
+          ctx.shadowColor = `rgba(${SC.join(",")},0.5)`;
+          ctx.shadowBlur = 4;
+          p.text(CONFIG.caption, p.width / 2, p.height - 16);
+          ctx.shadowBlur = 0;
+          p.pop();
+
+          /* —— 右下角静态歌词（DOM 层）：开场淡入，随落幕纱幕淡出，随循环重置 —— */
+          const cornerEl = document.getElementById("corner-lyrics");
+          if (cornerEl) {
+            const CO = CONFIG.corner;
+            const aIn = sstep(CO.fadeIn[0], CO.fadeIn[1], tSec);
+            const aOut = 1 - sstep(CO.fadeOutAt, loopTotal, tSec);
+            cornerEl.style.opacity = Math.min(aIn, aOut).toFixed(3);
+          }
+
+          /* —— 循环落幕 —— */
+          if (L.enable && tSec > F.at + L.after) {
+            const k = clamp01((tSec - F.at - L.after) / L.fadeOut);
+            p.noStroke();
+            p.fill(
+              CONFIG.bg.mid[0],
+              CONFIG.bg.mid[1],
+              CONFIG.bg.mid[2],
+              k * 255,
+            );
+            p.rect(0, 0, p.width, p.height);
+          }
+        };
+      });
+    </script>
+  </body>
+</html>

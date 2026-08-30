@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="MBHczBSiYfemijomzhBOhH">
+<head data-page-node-id="ncBQf1LIK5GWkKvjJtVwHo">
+<meta charset="UTF-8" data-page-node-id="BtTH5ExmzxlhKsNiDAD88d">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="JSnGSwzfqXGuBENJv3kScJ">
+<title>天青色等烟雨 · 江南彩墨</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    background: radial-gradient(ellipse at 50% 30%, #1d2b33 0%, #0e161b 70%);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    font-family: "Kaiti SC", "STKaiti", "KaiTi", "Noto Serif SC", serif;
+  }
+
+  /* ===== 9:16 舞台 ===== */
+  .stage {
+    position: relative;
+    height: min(96vh, 170.6vw);
+    aspect-ratio: 9 / 16;
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.06);
+    background: linear-gradient(180deg,
+      #cfe3e8 0%,   /* 天青色 */
+      #b8d4d6 22%,
+      #9fc2c2 45%,
+      #7fa8a6 62%,
+      #5f8a88 78%,
+      #4a7472 100%);
+  }
+
+  /* 宣纸肌理 */
+  .paper {
+    position: absolute; inset: 0; z-index: 1; pointer-events: none;
+    opacity: .5; mix-blend-mode: overlay;
+    background-image:
+      repeating-linear-gradient(0deg, rgba(255,255,255,.04) 0 2px, transparent 2px 4px),
+      repeating-linear-gradient(90deg, rgba(0,0,0,.03) 0 1px, transparent 1px 3px);
+  }
+
+  svg.scene { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  /* ===== 月色光晕 ===== */
+  .moon-glow {
+    animation: moonBreath 7s ease-in-out infinite;
+    transform-origin: center;
+  }
+  @keyframes moonBreath {
+    0%, 100% { opacity: .75; transform: scale(1); }
+    50%      { opacity: 1;   transform: scale(1.06); }
+  }
+
+  /* ===== 云雾流动 ===== */
+  .mist { animation: mistDrift 26s linear infinite; }
+  .mist.m2 { animation-duration: 38s; animation-direction: reverse; opacity: .6; }
+  .mist.m3 { animation-duration: 50s; opacity: .45; }
+  @keyframes mistDrift {
+    from { transform: translateX(-12%); }
+    to   { transform: translateX(12%); }
+  }
+
+  /* ===== 远山呼吸 ===== */
+  .mountain-far { animation: mountainFloat 14s ease-in-out infinite; }
+  @keyframes mountainFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(4px); }
+  }
+
+  /* ===== 炊烟袅袅 ===== */
+  .smoke { animation: smokeRise 9s ease-in infinite; opacity: 0; transform-origin: center bottom; }
+  .smoke.s2 { animation-delay: 3s; }
+  .smoke.s3 { animation-delay: 6s; }
+  @keyframes smokeRise {
+    0%   { transform: translateY(0) scale(.6) rotate(0deg); opacity: 0; }
+    15%  { opacity: .55; }
+    60%  { opacity: .35; }
+    100% { transform: translateY(-190px) scale(2.4) rotate(14deg); opacity: 0; }
+  }
+
+  /* ===== 小船摇曳 ===== */
+  .boat { animation: boatBob 5.5s ease-in-out infinite; transform-origin: center; }
+  @keyframes boatBob {
+    0%, 100% { transform: translateY(0) rotate(-1.2deg); }
+    50%      { transform: translateY(-5px) rotate(1.2deg); }
+  }
+
+  /* ===== 荷叶轻摆 ===== */
+  .lotus { animation: lotusSway 8s ease-in-out infinite; transform-origin: center bottom; }
+  .lotus.l2 { animation-delay: -3s; animation-duration: 9.5s; }
+  @keyframes lotusSway {
+    0%, 100% { transform: rotate(-2deg) translateY(0); }
+    50%      { transform: rotate(2.5deg) translateY(-4px); }
+  }
+
+  /* ===== 彩墨晕染脉动 ===== */
+  .splash { animation: splashPulse 10s ease-in-out infinite; transform-origin: center; mix-blend-mode: multiply; }
+  .splash.sp2 { animation-delay: -3.3s; }
+  .splash.sp3 { animation-delay: -6.6s; }
+  @keyframes splashPulse {
+    0%, 100% { opacity: .35; transform: scale(1); }
+    50%      { opacity: .55; transform: scale(1.15); }
+  }
+
+  /* ===== 雨丝 ===== */
+  .rain { position: absolute; inset: 0; z-index: 6; pointer-events: none; overflow: hidden; }
+  .drop {
+    position: absolute; top: -12%;
+    width: 1px; height: 9%;
+    background: linear-gradient(180deg, transparent, rgba(230, 245, 248, .55));
+    animation: rainFall linear infinite;
+  }
+  @keyframes rainFall {
+    to { transform: translateY(1250%); }
+  }
+
+  /* ===== 涟漪 ===== */
+  .ripples { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+  .ripple {
+    position: absolute;
+    border: 1.5px solid rgba(235, 250, 252, .5);
+    border-radius: 50%;
+    animation: rippleGrow 5s ease-out infinite;
+    opacity: 0;
+  }
+  @keyframes rippleGrow {
+    0%   { transform: scale(.15); opacity: .65; }
+    80%  { opacity: .12; }
+    100% { transform: scale(1); opacity: 0; }
+  }
+
+  /* ===== 歌词 ===== */
+  .lyric {
+    position: absolute; z-index: 8;
+    top: 11%; right: 9%;
+    writing-mode: vertical-rl;
+    letter-spacing: .42em;
+    font-size: clamp(16px, 3.4vmin, 26px);
+    color: #274b4e;
+    text-shadow: 0 1px 8px rgba(255,255,255,.55);
+    opacity: 0;
+    animation: lyricFade 16s ease-in-out infinite;
+  }
+  .lyric span { display: block; margin-left: .9em; }
+  .lyric.ly2 { animation-delay: 4s; }
+  .lyric.ly3 { animation-delay: 8s; }
+  .lyric.ly4 { animation-delay: 12s; }
+  @keyframes lyricFade {
+    0%, 100% { opacity: 0; transform: translateY(10px); filter: blur(4px); }
+    8%, 22%  { opacity: 1; transform: translateY(0);   filter: blur(0); }
+    30%      { opacity: 0; transform: translateY(-10px); filter: blur(4px); }
+  }
+
+  /* ===== 印章 ===== */
+  .seal {
+    position: absolute; z-index: 8;
+    left: 7%; top: 6%;
+    width: clamp(34px, 7vmin, 52px); height: clamp(34px, 7vmin, 52px);
+    background: #b23a3a;
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    color: #f5e9e0;
+    font-size: clamp(12px, 2.4vmin, 17px);
+    writing-mode: vertical-rl;
+    letter-spacing: .15em;
+    box-shadow: inset 0 0 0 2px rgba(245,233,224,.75), 0 4px 12px rgba(0,0,0,.2);
+    opacity: .88;
+    transform: rotate(-3deg);
+    animation: sealIn 2s ease-out 1s both;
+  }
+  @keyframes sealIn {
+    from { opacity: 0; transform: rotate(-3deg) scale(1.6); filter: blur(6px); }
+    to   { opacity: .88; transform: rotate(-3deg) scale(1); filter: blur(0); }
+  }
+
+  /* 题款 */
+  .title-ink {
+    position: absolute; z-index: 8;
+    left: 7%; bottom: 7%;
+    writing-mode: vertical-rl;
+    letter-spacing: .3em;
+    font-size: clamp(13px, 2.6vmin, 19px);
+    color: rgba(240, 250, 250, .85);
+    text-shadow: 0 1px 6px rgba(20,50,50,.6);
+    animation: titleIn 3s ease-out .5s both;
+  }
+  @keyframes titleIn {
+    from { opacity: 0; transform: translateY(16px); filter: blur(5px); }
+    to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+  }
+</style>
+</head>
+<body data-page-node-id="RHW8saWNIS4xlMZ5OaXgVJ">
+<div class="stage" id="stage" data-page-node-id="FZflSuQqtU2bP7tjHFKqQH">
+  <div class="paper" data-page-node-id="OPCQiyq973gl3m6OqKG8wm"></div>
+
+  <svg class="scene" viewBox="0 0 450 800" preserveAspectRatio="xMidYMid slice" data-page-node-id="FvPRHyjTGZIVSNw8iodAJG">
+    <defs data-page-node-id="4Yo46j7hJ8LJUTFCMeEZZo">
+      <filter id="blur2" data-page-node-id="gLROsIqOv4zPpjYOTpyEXt"><feGaussianBlur stdDeviation="2" data-page-node-id="mDTJxyJY95BV4w3d2IiaGD"/></filter>
+      <filter id="blur6" data-page-node-id="o36YBk4tgoD4WptNYy55hW"><feGaussianBlur stdDeviation="6" data-page-node-id="dko25QJrxiEW8XYtoaDzf8"/></filter>
+      <filter id="blur12" data-page-node-id="wJrg4Sb7Xbm2Jx8tRA3xM7"><feGaussianBlur stdDeviation="12" data-page-node-id="7ICF3ik7HYE8SVnq049vuC"/></filter>
+      <!-- 油画彩墨：湍流置换制造手绘毛边 + 微模糊晕染 -->
+      <filter id="inkPaint" x="-15%" y="-15%" width="130%" height="130%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.045 0.09" numOctaves="3" seed="7" result="noise"/>
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="7" result="disp"/>
+        <feGaussianBlur in="disp" stdDeviation="1.1"/>
+      </filter>
+      <linearGradient id="wallG" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#f5f2e9"/>
+        <stop offset="100%" stop-color="#d8d6c8"/>
+      </linearGradient>
+      <linearGradient id="roofG" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#4d5e66"/>
+        <stop offset="100%" stop-color="#2c3a40"/>
+      </linearGradient>
+      <linearGradient id="boatG" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#3d4a4e"/>
+        <stop offset="100%" stop-color="#232d30"/>
+      </linearGradient>
+      <radialGradient id="moonG" cx="50%" cy="50%" r="50%" data-page-node-id="eLG3RUfFld1h5Dq2LPD9kW">
+        <stop offset="0%" stop-color="#fdfcf4" data-page-node-id="aycSGAhz565xdgrrmn81Mv"/>
+        <stop offset="55%" stop-color="#f3f2e2" stop-opacity=".85" data-page-node-id="gQDROEfoOI20ZpTtAgmd4U"/>
+        <stop offset="100%" stop-color="#e8ead2" stop-opacity="0" data-page-node-id="EsmmDAHogXulGcDjaRGbH0"/>
+      </radialGradient>
+      <linearGradient id="waterG" x1="0" y1="0" x2="0" y2="1" data-page-node-id="1fudhOrACWPN4ZIxz6oEsY">
+        <stop offset="0%" stop-color="#8fb6b4" data-page-node-id="ViWpuBy6zkWYD04DXXYSeM"/>
+        <stop offset="100%" stop-color="#4a7472" data-page-node-id="gDopGxYqEppAoOCKQWUBbL"/>
+      </linearGradient>
+    </defs>
+
+    <!-- 月色 -->
+    <g class="moon-glow" style="transform-origin: 315px 130px;" data-page-node-id="3N9OpmMQ0yxVcGtKDiTMmu">
+      <circle cx="315" cy="130" r="95" fill="url(#moonG)" filter="url(#blur12)" data-page-node-id="g0LSOxzvnV1tYCT85qD1Fh"/>
+      <circle cx="315" cy="130" r="42" fill="#f8f7ea" opacity=".92" data-page-node-id="C77jSXWXWWHH81ENxvEjRQ"/>
+      <ellipse cx="303" cy="122" rx="9" ry="6" fill="#e3e2cf" opacity=".5" filter="url(#blur2)" data-page-node-id="sQJPHng8CZffBaTGuNBuwM"/>
+      <ellipse cx="328" cy="142" rx="6" ry="4" fill="#e3e2cf" opacity=".4" filter="url(#blur2)" data-page-node-id="CEq8ytr60AyIHpfQd4cJzi"/>
+    </g>
+
+    <!-- 远山 -->
+    <g class="mountain-far" data-page-node-id="uCHol38C9K7Al670YIF0FE">
+      <path d="M-20 300 Q60 215 130 268 Q200 205 285 262 Q360 218 470 285 L470 400 L-20 400 Z"
+            fill="#6d939a" opacity=".5" filter="url(#blur6)" data-page-node-id="Ffl80MYm75PCD7JHbQrfDk"/>
+      <path d="M-20 330 Q90 260 180 305 Q270 255 350 300 Q420 270 470 315 L470 420 L-20 420 Z"
+            fill="#557e84" opacity=".55" filter="url(#blur6)" data-page-node-id="eeKUu27lxTpn9nJfjhS4oF"/>
+    </g>
+
+    <!-- 云雾 -->
+    <g class="mist" data-page-node-id="gW0NDaawlwBNS20ypt2x8u">
+      <ellipse cx="120" cy="300" rx="130" ry="18" fill="#e8f1f1" opacity=".55" filter="url(#blur12)" data-page-node-id="4dAvFjqJY83cFGnLUG1EAv"/>
+      <ellipse cx="330" cy="275" rx="150" ry="15" fill="#eef5f4" opacity=".45" filter="url(#blur12)" data-page-node-id="zK3hT2i7xkyrOUEfIlCvjq"/>
+    </g>
+    <g class="mist m2" data-page-node-id="xbXRkxpEAIAPkA15MPRZCy">
+      <ellipse cx="230" cy="330" rx="170" ry="14" fill="#e2eeee" opacity=".5" filter="url(#blur12)" data-page-node-id="aJ8QCPwusgfESXZTmoc5RV"/>
+    </g>
+    <g class="mist m3" data-page-node-id="Mq3zwGD6BOq3Kzz7oyWErO">
+      <ellipse cx="160" cy="360" rx="120" ry="12" fill="#dceaea" opacity=".4" filter="url(#blur12)" data-page-node-id="2rKiZYdpd5BhBHNKA4NDJi"/>
+    </g>
+
+    <!-- 河面 -->
+    <rect x="0" y="380" width="450" height="420" fill="url(#waterG)" opacity=".85" data-page-node-id="6Fn4EUVazFDDvEa7OeAm44"/>
+    <!-- 月影入水：月色被打捞起 -->
+    <ellipse cx="315" cy="470" rx="30" ry="70" fill="#f4f3e0" opacity=".22" filter="url(#blur12)" data-page-node-id="gI9t3x6UlPITBN6lBNl8f7">
+      <animate attributeName="opacity" values=".16;.3;.16" dur="6s" repeatCount="indefinite" data-page-node-id="i4owwCpolysykjtYCtBgnY"/>
+    </ellipse>
+
+    <!-- 民居：白墙黛瓦（彩墨晕染） -->
+    <g filter="url(#inkPaint)" opacity=".94" data-page-node-id="7ZegIS37IF8TJqW2RTgHZH">
+      <!-- 左岸 -->
+      <g data-page-node-id="hcBTqzjuBEpRSjrDlPXJqp">
+        <rect x="28" y="318" width="62" height="52" fill="url(#wallG)" data-page-node-id="3Bgop8PL5BDtCILpMGLJDf"/>
+        <path d="M18 320 L59 292 L100 320 Z" fill="url(#roofG)" data-page-node-id="3Lw7rlhGak54U1PP1yMw21"/>
+        <rect x="46" y="338" width="14" height="20" fill="#4d5f63" opacity=".8" data-page-node-id="OY9FWZgHAKGNjcyI13rdNj"/>
+        <rect x="70" y="338" width="10" height="10" fill="#f7d9a0" opacity=".85" data-page-node-id="HyBXLnT7QOnSEP2VVLvv4h"/>
+      </g>
+      <g data-page-node-id="ervyuccmCnzFbqiGI4Ec7x">
+        <rect x="102" y="330" width="50" height="42" fill="url(#wallG)" data-page-node-id="yKHIBOvpD9EskGD4nx63sA"/>
+        <path d="M94 332 L127 308 L160 332 Z" fill="url(#roofG)" data-page-node-id="Y8ZjSbKgDFeunnD9UcArDl"/>
+        <rect x="118" y="346" width="10" height="10" fill="#f7d9a0" opacity=".8" data-page-node-id="KcFATQOaO9wKGbrYPtLg8w"/>
+      </g>
+      <!-- 右岸 -->
+      <g data-page-node-id="Ixf8KThw0thSj4aKnshF2k">
+        <rect x="330" y="322" width="58" height="48" fill="url(#wallG)" data-page-node-id="KP4Gt70J4wyED5zw9tenD4"/>
+        <path d="M322 324 L359 298 L396 324 Z" fill="url(#roofG)" data-page-node-id="Au6SzD9U8CpTFxxjL3ZwNV"/>
+        <rect x="352" y="340" width="11" height="11" fill="#f7d9a0" opacity=".85" data-page-node-id="wtLAGlBfPI1Z7mSVIM3DGs"/>
+      </g>
+      <g data-page-node-id="NRe462keuGFoICFvlwQ6sc">
+        <rect x="276" y="334" width="46" height="38" fill="url(#wallG)" data-page-node-id="2kAgTIRu0lYpE5ggVbwLec"/>
+        <path d="M268 336 L299 314 L330 336 Z" fill="url(#roofG)" data-page-node-id="eTZF5vdwrEPcRjbJmptvWE"/>
+      </g>
+    </g>
+
+    <!-- 炊烟 -->
+    <g filter="url(#blur6)" data-page-node-id="82DWts8WPC0zVrrtbG7B7B">
+      <ellipse class="smoke"    cx="74"  cy="296" rx="10" ry="16" fill="#dfe9e8" data-page-node-id="WNWE8CJPiXzBZjIYrX2KRC"/>
+      <ellipse class="smoke s2" cx="128" cy="312" rx="8"  ry="13" fill="#e4edec" data-page-node-id="00453yx766XGQBCKqnbArO"/>
+      <ellipse class="smoke s3" cx="360" cy="302" rx="9"  ry="14" fill="#dfe9e8" data-page-node-id="xp4oBu3CSg7I4izZY5qvzL"/>
+    </g>
+
+    <!-- 石拱桥（彩墨晕染） -->
+    <g filter="url(#inkPaint)" opacity=".92" data-page-node-id="L2FRD0KdXEfjhyvBKHPD4W">
+      <path d="M150 372 Q225 328 300 372 L300 384 L150 384 Z" fill="#7b8b8d" data-page-node-id="Nvd0Cs0erzDsOTN7LFC2QH"/>
+      <path d="M178 372 Q225 344 272 372 Z" fill="#8fb6b4" data-page-node-id="MVstLniZIUdfEDZrcCMBgq"/>
+      <line x1="150" y1="368" x2="300" y2="368" stroke="#5d6d6f" stroke-width="2" opacity=".45" data-page-node-id="tZK3PEHreKODKr2PeSv23J"/>
+      <line x1="168" y1="356" x2="168" y2="368" stroke="#5d6d6f" stroke-width="1.5" opacity=".35" data-page-node-id="KAjruD6EzGMmqooawZli2Z"/>
+      <line x1="196" y1="348" x2="196" y2="368" stroke="#5d6d6f" stroke-width="1.5" opacity=".35" data-page-node-id="FDj2UaRm69r31qHOFHEH2S"/>
+      <line x1="225" y1="345" x2="225" y2="368" stroke="#5d6d6f" stroke-width="1.5" opacity=".35" data-page-node-id="7M4KQUtK69J4mAu7AkJkSg"/>
+      <line x1="254" y1="348" x2="254" y2="368" stroke="#5d6d6f" stroke-width="1.5" opacity=".35" data-page-node-id="TuCBs9Ry3luvVCPzGwnvWt"/>
+      <line x1="282" y1="356" x2="282" y2="368" stroke="#5d6d6f" stroke-width="1.5" opacity=".35" data-page-node-id="rJDOsbfsoRrCWsJo5JQXFH"/>
+    </g>
+    <!-- 桥影 -->
+    <path d="M150 388 Q225 428 300 388 L300 384 L150 384 Z" fill="#3d5c5a" opacity=".35" filter="url(#blur2)" data-page-node-id="p4Byg9ejhRrbkWYHv5F9Bu"/>
+
+    <!-- 乌篷船（彩墨晕染） -->
+    <g class="boat" data-page-node-id="Uvi3IqVNo2C6CxQQAxpMxs">
+      <g filter="url(#inkPaint)">
+        <path d="M100 520 Q160 540 235 522 L228 508 Q160 522 108 506 Z" fill="url(#boatG)" data-page-node-id="kbfp4J3b0bp7lfsxWzmnrw"/>
+        <path d="M130 508 Q160 486 196 506 Q160 500 130 508 Z" fill="#4a3f33" opacity=".92" data-page-node-id="TBsDGEHc1dPJcw5CpQ2pGH"/>
+        <line x1="222" y1="510" x2="238" y2="470" stroke="#4a3f33" stroke-width="2.5" opacity=".85" data-page-node-id="EJz5ilwEY2MULV5xsgqiyV"/>
+      </g>
+      <!-- 倒影 -->
+      <path d="M100 540 Q160 556 235 542 L228 556 Q160 568 108 554 Z" fill="#2f3b3e" opacity=".22" filter="url(#blur2)" data-page-node-id="lAC2GIrB1a16gU04wmvhyP"/>
+    </g>
+
+    <!-- 彩墨晕染 -->
+    <g data-page-node-id="8MHvQdN0wxnxMFfLMkaBTu">
+      <circle class="splash"    cx="60"  cy="660" r="70"  fill="#3e7d74" filter="url(#blur12)" data-page-node-id="wLhHmz1VRP0gdui7rFimTc"/>
+      <circle class="splash sp2" cx="395" cy="600" r="60"  fill="#2f6a80" filter="url(#blur12)" data-page-node-id="uQKJKhD6YzHyzEJfNjQqFf"/>
+      <circle class="splash sp3" cx="330" cy="730" r="55"  fill="#8a5a4a" opacity=".3" filter="url(#blur12)" data-page-node-id="nLQMva54h93oF3DyolqYtZ"/>
+      <circle class="splash sp2" cx="90"  cy="745" r="42"  fill="#c8a24a" opacity=".28" filter="url(#blur12)" data-page-node-id="gxLt4MdtmPC3pATkQyP8h5"/>
+    </g>
+
+    <!-- 荷叶荷花（彩墨晕染） -->
+    <g class="lotus" filter="url(#inkPaint)" data-page-node-id="9YbFTCgTk1DYBEOVNGhVxZ">
+      <ellipse cx="70" cy="700" rx="34" ry="12" fill="#2e5f52" opacity=".9" data-page-node-id="wm13oIogmzgyNtGhQwoIlx"/>
+      <ellipse cx="118" cy="716" rx="24" ry="9" fill="#35685a" opacity=".85" data-page-node-id="EQyBVOVHtqod3hL1kD7feu"/>
+      <path d="M82 668 Q70 650 78 636 Q92 648 82 668 Z" fill="#c66a6a" data-page-node-id="CHLVhbWO4FzdQP5pPptpxg"/>
+      <path d="M78 668 Q66 656 62 644 Q76 650 78 668 Z" fill="#b85c60" data-page-node-id="41MZHcBC2S0YQg6B0LwNpY"/>
+      <line x1="76" y1="668" x2="74" y2="700" stroke="#2e5f52" stroke-width="2" data-page-node-id="sajPCgmhxlEqTvdnjDtB8y"/>
+    </g>
+    <g class="lotus l2" filter="url(#inkPaint)" data-page-node-id="0c7DfvyEKH7aeDIWZnOnIM">
+      <ellipse cx="380" cy="690" rx="30" ry="11" fill="#2e5f52" opacity=".9" data-page-node-id="wt5W7XMQhz4KbSM1tdfSdT"/>
+      <ellipse cx="340" cy="708" rx="20" ry="8" fill="#35685a" opacity=".8" data-page-node-id="31BLYKxNe4ehx1EUsDnoJA"/>
+      <circle cx="368" cy="664" r="7" fill="#d08a8a" data-page-node-id="CPGjKCKQin8b5TrBkcqrdX"/>
+      <line x1="368" y1="671" x2="372" y2="690" stroke="#2e5f52" stroke-width="2" data-page-node-id="vI8ZKbMaEY5BWoOZx2T6yu"/>
+    </g>
+  </svg>
+
+  <!-- 涟漪 -->
+  <div class="ripples" id="ripples" data-page-node-id="C2GlyReOvAXo1FTJp8lzD4"></div>
+
+  <!-- 雨丝 -->
+  <div class="rain" id="rain" data-page-node-id="2Ff2ZjKa0tfsJOWopeajDj"></div>
+
+  <!-- 歌词 -->
+  <div class="lyric ly1" data-page-node-id="L7H7lo9mtChthdxhBGmDnv"><span data-page-node-id="glSHDnF6nD9iJSZBdgvKBA">天青色等烟雨</span><span data-page-node-id="h08exlhHvA4leIwHkz090K">而我在等你</span></div>
+  <div class="lyric ly2" data-page-node-id="lzhKjQY85ETzEsN2HThIFG"><span data-page-node-id="NdkM6w7hXgpslScSlrByQn">炊烟袅袅升起</span><span data-page-node-id="yzJy6p7ZP1X10YChVbNJzU">隔江千万里</span></div>
+  <div class="lyric ly3" data-page-node-id="94ie19hMlV36C9PJBy6bLC"><span data-page-node-id="LLIVq2jpHooPxSsBy8WQz2">月色被打捞起</span><span data-page-node-id="TTyyDp2UsaCDsMV99qH8Ix">晕开了结局</span></div>
+  <div class="lyric ly4" data-page-node-id="serIrjg8XEPIH69zczXCsl"><span data-page-node-id="FSTyvGAn60VsHGuuoAFEPn">如传世的青花瓷</span><span data-page-node-id="R07nmVnjcHF3sFLfp58yiT">自顾自美丽</span></div>
+
+  <!-- 印章 & 题款 -->
+  <div class="seal" data-page-node-id="JAo4cRtfDtGIbmTAx63PpE">青花</div>
+  <div class="title-ink" data-page-node-id="Xe2dClEMZpK5qj69UVXlJ1">江南烟雨 · 彩墨</div>
+</div>
+
+<script>
+  // 生成雨丝
+  const rain = document.getElementById('rain');
+  for (let i = 0; i < 90; i++) {
+    const d = document.createElement('div');
+    d.className = 'drop';
+    d.style.left = Math.random() * 100 + '%';
+    d.style.animationDuration = (1.4 + Math.random() * 1.6) + 's';
+    d.style.animationDelay = (-Math.random() * 3) + 's';
+    d.style.opacity = .25 + Math.random() * .5;
+    rain.appendChild(d);
+  }
+
+  // 生成水面涟漪（下半部水面区域）
+  const rip = document.getElementById('ripples');
+  for (let i = 0; i < 14; i++) {
+    const r = document.createElement('div');
+    r.className = 'ripple';
+    const size = 24 + Math.random() * 60;
+    r.style.width = size + 'px';
+    r.style.height = size / 2.6 + 'px';
+    r.style.left = (4 + Math.random() * 88) + '%';
+    r.style.top = (52 + Math.random() * 40) + '%';
+    r.style.animationDuration = (3.5 + Math.random() * 3) + 's';
+    r.style.animationDelay = (-Math.random() * 6) + 's';
+    rip.appendChild(r);
+  }
+</script>
+</body>
+</html>

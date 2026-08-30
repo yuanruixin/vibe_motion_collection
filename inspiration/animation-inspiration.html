@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="ezkooKFAmBGR566r9be1Gs">
+<head data-page-node-id="yUX1mSN7e6Vh99X3RfdCyb">
+<meta charset="UTF-8" data-page-node-id="WVlmhNWRruoTjbnp1D6Mgx">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="lph5EcqR99QD4k767D2izC">
+<title>生成动画灵感手册 · 16:9</title>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;900&family=Cormorant+Garamond:ital@1&display=swap" rel="stylesheet" data-page-node-id="dpAGZ9dTQAmu9cRn4Rz66v">
+<style>
+  :root{
+    --bg:#0a0e21; --panel:#111731; --panel2:#0d1226;
+    --ink:#e9e4d6; --sub:#9aa3c0; --gold:#ffd27a; --rose:#ff9e6b; --blue:#7aa8ff; --line:#232c52;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--ink);font-family:"Noto Serif SC",serif;line-height:1.85;padding:0 0 120px}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 32px}
+  header{padding:110px 0 70px;text-align:center;position:relative;overflow:hidden}
+  header h1{font-size:46px;font-weight:900;letter-spacing:.12em;background:linear-gradient(120deg,#ffd27a,#ff9e6b,#7aa8ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+  header p{color:var(--sub);margin-top:14px;font-size:15px;letter-spacing:.2em}
+  .ratio-bar{display:inline-block;margin-top:26px;border:1px solid var(--line);border-radius:10px;padding:8px 22px;color:var(--gold);font-size:13px;letter-spacing:.3em}
+  nav{position:sticky;top:0;background:rgba(10,14,33,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);z-index:50}
+  nav .wrap{display:flex;gap:28px;padding:14px 32px;font-size:14px}
+  nav a{color:var(--sub);text-decoration:none;letter-spacing:.1em}
+  nav a:hover{color:var(--gold)}
+  section{margin-top:90px}
+  h2{font-size:28px;font-weight:900;letter-spacing:.1em;display:flex;align-items:center;gap:14px}
+  h2 .no{font-family:"Cormorant Garamond",serif;font-style:italic;font-size:34px;color:var(--gold);font-weight:400}
+  h2::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+  .lead{color:var(--sub);margin:18px 0 34px;font-size:15px;max-width:760px}
+  .grid{display:grid;gap:18px}
+  .g2{grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .g3{grid-template-columns:repeat(auto-fit,minmax(240px,1fr))}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:24px 26px;transition:transform .3s ease,border-color .3s ease}
+  .card:hover{transform:translateY(-3px);border-color:#3a4678}
+  .card h3{font-size:17px;color:var(--gold);letter-spacing:.05em}
+  .card .en{font-family:"Cormorant Garamond",serif;font-style:italic;color:var(--sub);font-size:14px;margin:2px 0 12px}
+  .card p{font-size:14px;color:#c6cbe0}
+  .tag{display:inline-block;font-size:11px;color:var(--blue);border:1px solid #2c3a6e;border-radius:99px;padding:1px 10px;margin:10px 6px 0 0}
+  table{width:100%;border-collapse:collapse;margin-top:24px;font-size:14px}
+  th{color:var(--gold);text-align:left;font-weight:600;border-bottom:1px solid var(--line);padding:12px 14px;letter-spacing:.08em}
+  td{border-bottom:1px solid #1a2144;padding:12px 14px;color:#c6cbe0;vertical-align:top}
+  td:first-child{white-space:nowrap;color:var(--ink)}
+  .demo{margin-top:40px;background:var(--panel2);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+  .demo .head{padding:18px 26px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px}
+  .demo .head h3{font-size:17px;color:var(--gold)}
+  .demo .head span{font-family:"Cormorant Garamond",serif;font-style:italic;color:var(--sub);font-size:14px}
+  .demo .stage{display:flex;justify-content:center;background:#05070f;padding:10px}
+  .demo .note{padding:16px 26px 22px;font-size:13.5px;color:var(--sub)}
+  .demo canvas{border-radius:8px;display:block}
+  code{background:#1a2144;color:#ffd9a0;border-radius:5px;padding:1px 7px;font-size:12.5px;font-family:ui-monospace,Menlo,monospace}
+  .principle{display:flex;gap:18px;padding:20px 0;border-bottom:1px dashed var(--line)}
+  .principle .n{font-family:"Cormorant Garamond",serif;font-style:italic;font-size:26px;color:var(--gold);min-width:44px}
+  .principle h3{font-size:16px}
+  .principle h3 em{font-family:"Cormorant Garamond",serif;font-style:italic;color:var(--sub);font-weight:400;font-size:14px;margin-left:8px}
+  .principle p{font-size:14px;color:#c6cbe0;margin-top:6px}
+  .foot-note{margin-top:80px;text-align:center;color:var(--sub);font-size:13px;letter-spacing:.15em}
+  .scene{border-left:3px solid var(--gold);padding:16px 22px;background:var(--panel);border-radius:0 12px 12px 0;margin-top:16px}
+  .scene h3{font-size:16px;color:var(--gold)}
+  .scene p{font-size:14px;color:#c6cbe0;margin-top:6px}
+</style>
+</head>
+<body data-page-node-id="K9WQzuT2VjKSAqr0wWLp8m">
+
+<header data-page-node-id="ZVu9qtuR2XB0Dp1cbCkpyK">
+  <h1 data-page-node-id="ZwHDgQZwOfFYst0mgByEvw">生成动画灵感手册</h1>
+  <p data-page-node-id="Tr1vpaK93hxa930FNXiGZ1">OPENPROCESSING 热门作品 × 动画设计原则 × 16:9 实战</p>
+  <div class="ratio-bar" data-page-node-id="X6Z2lMiSZxr7EnI1bytxUJ">画面比例 16 : 9</div>
+</header>
+
+<nav data-page-node-id="5Fg1CbWlAE28fnfQtYe6Wq"><div class="wrap" data-page-node-id="fJqNDzgYkRspnuTPTJjKJu">
+  <a href="#trending" data-page-node-id="FhNUPLoqV6kcu59TJAAs6Z">热门拆解</a><a href="#techniques" data-page-node-id="rwGEsG8vPTA8x877QG0dMD">流行技法</a><a href="#sihua" data-page-node-id="rwGEsG8vPTA8x877QG0dME">思花视觉诗</a><a href="#principles" data-page-node-id="dkAVzeGkQWEg4HfuQrQdeH">设计原则</a><a href="#ratio" data-page-node-id="tjdumzDT6HxPStaqEcoFuj">16:9 构图</a><a href="#demos" data-page-node-id="wdtX81JEc1D7Hm5YQN5trh">活体演示</a><a href="#apply" data-page-node-id="6myNCynsm3EssQaVu11R77">落地建议</a>
+</div></nav>
+
+<div class="wrap" data-page-node-id="2IdRFwxFxl7zH5rEyTHqjN">
+
+<!-- ============ 01 热门作品 ============ -->
+<section id="trending" data-page-node-id="EBuUDkFEbaLiNQeSOZRjHi">
+  <h2 data-page-node-id="oLOx8HFAj8AmpADtyzAMEH"><span class="no" data-page-node-id="J52sBapriDJbV9TXr04CWA">01</span>OpenProcessing 热门作品拆解</h2>
+  <p class="lead" data-page-node-id="NGESY0FvCP3xxfbBnTggkX">以下作品取自 OpenProcessing 本周被赞最多（Loved this Week）与编辑精选，按视觉语言分组。每张卡片标注了可移植的核心技法。</p>
+  <div class="grid g3" data-page-node-id="DmUA7gkBImhXjvWTf4fFyL">
+    <div class="card" data-page-node-id="qylSmfIh960u09R49ZJZZC"><h3 data-page-node-id="GLogAcfkyI9lsy5FVzzAO0">Fluid · 流体</h3><p class="en" data-page-node-id="Fivs3crzd8GQvZGq8BcCSR">Matthias Hurrle</p><p data-page-node-id="lRVzvNdx3TM3HVLPeZuZPS">粘性流体模拟，色彩随流场扩散交融，画面如油画缓慢晕开。热门榜首长青题材。</p><span class="tag" data-page-node-id="TCdu6yBzHfBmGaqzyLJGAs">流体模拟</span><span class="tag" data-page-node-id="qP34QmeYgYzi5bn0xsYAwT">色彩扩散</span></div>
+    <div class="card" data-page-node-id="nEbXDUBzZOwNoW5BVN3BG1"><h3 data-page-node-id="zuSkc3ixEFcAJpJC3KUXCq">Unusual Globe · 奇球</h3><p class="en" data-page-node-id="8dJQ25rh7AIfBvZOyxgSXn">Ivan Rudnicki</p><p data-page-node-id="H1jvhUuy8Sp3nAimAwgYEp">极简线框几何体在 3D 空间中缓慢自转，负空间与线条密度构成节奏。</p><span class="tag" data-page-node-id="XDLm85DFGi8UU55ZAyuilm">WEBGL</span><span class="tag" data-page-node-id="QK9gKZRsTAnvy7IOegYeWR">线框</span></div>
+    <div class="card" data-page-node-id="2FEAg5qhjU7cOezRzbv3SP"><h3 data-page-node-id="ksKeaVKCulk36PvqtCo5XQ">Osaka Loop Line Tracer</h3><p class="en" data-page-node-id="HEh3mZHJKgIATGJX2OLC2A">Naoki Tsutae</p><p data-page-node-id="0FEIjeiNdBYmmGwPFBF1UR">在城市地图线路上持续追踪并留下累积轨迹，时间越长画面越厚重——"过程即作品"。</p><span class="tag" data-page-node-id="9eWtZwqzHVi82hfyU1fywI">轨迹累积</span><span class="tag" data-page-node-id="SPnsIsz063rUP0uLBCSXve">地图</span></div>
+    <div class="card" data-page-node-id="66b319jfh3Wr6T9m2T5mHM"><h3 data-page-node-id="Hi9XvXKfHlYUlrEXrjgEMz">260531a / 260516a 系列</h3><p class="en" data-page-node-id="ru8cidA4Fycp31bCVGLR6E">Okazz</p><p data-page-node-id="hdebWCoEH3SJ86scWBK5Ap">日式波普风格：网格单元由噪声驱动形状渐变与旋转，高饱和色板，永远处于"下一秒就变形"的状态。</p><span class="tag" data-page-node-id="ZvCFCFSidHcZEbdBiXKgE4">噪声网格</span><span class="tag" data-page-node-id="D45X8sw7F0cfhsohQIGkXq">波普色板</span></div>
+    <div class="card" data-page-node-id="B9fDQvqMCJmBUqeLEUjTHF"><h3 data-page-node-id="XN67UugpL1aPOoPgZ89JcO">lantern sunset · 灯笼暮色</h3><p class="en" data-page-node-id="EGQ2k5ku7b1Q82sNBZHDAy">fuzzle</p><p data-page-node-id="xABKR9BktA2g4vntGe4NLS">暖色灯笼在暮色中漂浮，光晕层层叠加，与你的「飞鸟集」暮色基调高度同源。</p><span class="tag" data-page-node-id="h1uoJXuGXdWtAAEEPpM6Qf">光晕</span><span class="tag" data-page-node-id="QUCNGxpoc4qMChElL5SFx3">氛围</span></div>
+    <div class="card" data-page-node-id="WqFJ0GSkme2U1xsNYmQ8BF"><h3 data-page-node-id="ko0HYUvz1YouNi2kJUMEA9">Network · 网络</h3><p class="en" data-page-node-id="5BVib9bMfclfJqy53sAJLR">Roni Kaufman</p><p data-page-node-id="FrdPz6rl4bUlVOAtU4T5FM">节点与连线的生长动画，每帧只增加一点点结构，观感克制而确定。</p><span class="tag" data-page-node-id="R5fdhlgTWq01S9NWUS1oSt">生长算法</span><span class="tag" data-page-node-id="FF6znCyhGKVoWnOX8zJ8Tk">节点图</span></div>
+    <div class="card" data-page-node-id="xRUaiajOBfe1VTMnY4S39y"><h3 data-page-node-id="6boDRCxtn0YeYJ6hbBZHKY">Spectral Orbit · 光谱轨道</h3><p class="en" data-page-node-id="R7GVFmGCbUsx5Exgl4W2wX">OpenProcessing 精选</p><p data-page-node-id="J7s3L9KfibvBQzGUB4NkBw">漆黑虚空中的霓虹方块轨道漂移：HSB 色彩空间 + ADD 混合 + 实时模糊，营造柔光泛彩。</p><span class="tag" data-page-node-id="2TYxQzgwCFkQh4z0RSnVyC">ADD 混合</span><span class="tag" data-page-node-id="zolhlEmvGpPK6mrKzbyUKB">HSB</span></div>
+    <div class="card" data-page-node-id="0iQOTdUZLFuCnM6hBzAtmr"><h3 data-page-node-id="EMdZ84rFo6FMtX2SXO2PMf">Seamless Organic Grid</h3><p class="en" data-page-node-id="QftATTc4uoyeCumQhMGetj">OpenProcessing 精选</p><p data-page-node-id="56GqwGKhglsBrqs9YGjyWM">单色椭圆网格沿"噪声空间中的圆"采样，永不停滞地有机流动——解决噪声峰值卡顿的经典技巧。</p><span class="tag" data-page-node-id="gFsMHVpJyL8ZD7mI5JvG3V">循环采样</span><span class="tag" data-page-node-id="ICHfwAuPqLJpa6vfP12RPQ">单色</span></div>
+    <div class="card" data-page-node-id="G0M4wjvFKaUaXT9IBDVe9p"><h3 data-page-node-id="55zgXEBjJxr2ccZzCXrmDQ">Bauhaus Kinetic Poster</h3><p class="en" data-page-node-id="6H07agE1TFveuH4TRCjVNs">Genuary'26</p><p data-page-node-id="EAfbLxBz8NUVHdnodhlaQF">包豪斯色板 + 网格单元 <code data-page-node-id="UzKEieQEQDHFnm4yjhkTVx">lerp</code> 平滑旋转 + 底部动版式，海报级排版的动效化。</p><span class="tag" data-page-node-id="ud5dJiUAxrCEPgERDe4jcF">动力学排版</span><span class="tag" data-page-node-id="rIRl1qJdwbpWV8hG3Wkuu4">包豪斯</span></div>
+  </div>
+</section>
+
+<!-- ============ 02 流行技法 ============ -->
+<section id="techniques" data-page-node-id="m75jTgSFZbD0LGTE6c6CV0">
+  <h2 data-page-node-id="VIxHElHGl0VW1RkXukjYBl"><span class="no" data-page-node-id="cfX97d15hLgtku6WqIzEnq">02</span>从热门作品中提炼的流行技法</h2>
+  <p class="lead" data-page-node-id="DeLVFEo3RBJhID6LzMPFg1">把上百个热门 sketch 放在一起看，技法其实高度收敛。以下 8 种是当前生成动画的"公共语言"。</p>
+  <table data-page-node-id="BxTTuoN9f4mUcpkYA8TaH1">
+    <tr data-page-node-id="jOTAk15yZ55LqipKRyiuy7"><th style="width:150px" data-page-node-id="yFDZeNRcgcVFBXr78vFi0A">技法</th><th data-page-node-id="pJ3RstCNBkvOaA5OYK9CBy">做法</th><th data-page-node-id="UNMB9DKrrP3rdBbAoDv3xf">适用场景</th></tr>
+    <tr data-page-node-id="IMDqzRGw3RnOyCXmoKQGoU"><td data-page-node-id="85NTujmP8jS5THSYF48ODc">流场 + 轨迹</td><td data-page-node-id="83PL9ITZrrTtJuZq451M3Q">Perlin 噪声给粒子赋予角度，粒子移动时不擦除画面（或用半透明矩形缓慢擦除），轨迹自然累积成丝线。</td><td data-page-node-id="CkWESCnndCgU5vljxK5xlD">风、水流、候鸟群、烟雾</td></tr>
+    <tr data-page-node-id="9xdGmDUWUIZTXxuJJjmFfR"><td data-page-node-id="xIQDoy3Is9YMdCHiZ5CEm2">噪声网格</td><td data-page-node-id="6JF9o80Q0lORz6fiVoZmcS">网格单元的大小 / 旋转 / 形状由 <code data-page-node-id="yC3Zv9afj2RvMXILZNq9lP">noise(x, y, t)</code> 驱动，t 沿圆周采样保证永不循环停滞。</td><td data-page-node-id="Jf9AEDE98vWONlkjhlXyET">背景肌理、海浪、麦田</td></tr>
+    <tr data-page-node-id="YITjMOcCaWpOwiorjWT8k5"><td data-page-node-id="xP5NgKukjlH6dOPsGPHmEi">ADD 泛光</td><td data-page-node-id="evpYLx4DKaQDBpF3UB5tLM"><code data-page-node-id="3nv1tBN3wuDcLsAmdLx3Ku">blendMode(ADD)</code> 让重叠轨迹亮度叠加，配合低透明度产生萤火般泛光。</td><td data-page-node-id="COG0bZ3EIhMsm4x6RiDDq1">星空、花火、灯笼</td></tr>
+    <tr data-page-node-id="MZ867CSwnmv6BV8aN7mD2L"><td data-page-node-id="C1bExiD6bSROP3ggZYWQCg">HSB 色相漂移</td><td data-page-node-id="cnUdvFvjdTCU1J6oHJGDjw">用 HSB 色彩空间，让色相随时间缓慢移动，同一系统自动产生四季 / 昼夜变化。</td><td data-page-node-id="r6LgNYfv9sg25rPrfH74LJ">天空渐变、暮色流转</td></tr>
+    <tr data-page-node-id="appEBIYVeqnAGsLgNFdmfi"><td data-page-node-id="zNRVSyUrvWiEB56HIAqjcG">分层合成</td><td data-page-node-id="pZ3UVivIQ2jFKUR1TQD51H">天空层 / 轨迹层 / 主体层 / 颗粒层分开渲染再叠加，画面有空气感与景深。</td><td data-page-node-id="sBej1PKouNzKoyiYP24pnO">所有"电影感"画面</td></tr>
+    <tr data-page-node-id="ubJgbCLGmpM7G5GMgDDcnl"><td data-page-node-id="geCakKu7LJiPTixl4Zr69X">逐字排版动画</td><td data-page-node-id="M1EOXVA2sg7I93fJQio7sR">文字按字符依次入场（配合缓动与模糊），阅读节奏即动画节奏。</td><td data-page-node-id="DwYFvUfMwULn2SJU5tlxN0">诗句、标题、字幕</td></tr>
+    <tr data-page-node-id="K8xJAb0CZAOwexFG32TR0M"><td data-page-node-id="X34iobVWAbRoY5GKaarPXv">物理模拟</td><td data-page-node-id="6suPcC6ueUeHoxUAA8jbZU">流体 / 布料 / 头发 / 簧片等真模拟正取代纯噪声，"被物理律驱动"的动效自带说服力。</td><td data-page-node-id="m3DqbnCQ3W8JXh7WHLG7qm">旗帜、涟漪、布</td></tr>
+    <tr data-page-node-id="q7WLCRU7xeA5RDz2l2EVvl"><td data-page-node-id="Y9B3AO4rwtN8QJtKGSqI8m">胶片质感</td><td data-page-node-id="3f4JtgU9Vq23U4ngwv3sxi">动态噪点颗粒 + 径向暗角，让"屏幕感"变成"胶片感"，一键提升质感。</td><td data-page-node-id="U27iaY2IiaTA3upaTazunu">所有抒情类画面</td></tr>
+  </table>
+</section>
+
+<!-- ============ 03 思花视觉诗 ============ -->
+<section id="sihua">
+  <h2><span class="no">03</span>思花 · 代码写成的视觉诗</h2>
+  <p class="lead">思花（小红书 50 万+ 粉，抖音同名账号）原本是平面设计师，创作方式是"用 AI 辅助编程做诗意视觉艺术"——代码生成的动态画面（线条、网格、粒子、光影）配上一段高度凝练的文字（原创随想或引用诗词文学）。视频短则 10 秒、长则几分钟，没有剧情、不炫技术，却形成了极稳定的个人美学。新榜评价她："AI 不是作品的主题，而是一种新的视觉语言。"这与「飞鸟集」的路数完全同源，是最值得对标的方法论。</p>
+  <div class="grid g2">
+    <div class="card"><h3>凝练到一句的文字</h3><p>每期只承载一句话。文字不是字幕而是画面的"落款"：视觉先铺垫 70% 时长，文字最后浮现，读者自然把前面看到的动态"翻译"成那句诗。克制是涨粉的秘密。</p><span class="tag">一句话叙事</span><span class="tag">文字落款</span></div>
+    <div class="card"><h3>极简元素 × 极致编排</h3><p>元素永远只有几类：一根线、一个网格、一群粒子、一片光。但她把每个元素的运动节奏调到极致——一条线的呼吸可以撑满 15 秒。少而精，与 OpenProcessing 的"技术炫技流"形成互补。</p><span class="tag">单元素长镜头</span><span class="tag">节奏调校</span></div>
+    <div class="card"><h3>平面设计师的排版素养</h3><p>版式、字距、对齐、留白全部在线：文字位置永远精确落在视觉重心，标题与正文层级分明。生成动画的"最后一公里"往往是排版而不是算法。</p><span class="tag">版式</span><span class="tag">留白</span></div>
+    <div class="card"><h3>情绪 > 奇观</h3><p>她的作品不靠"哇"靠"嗯……"：慢、静、轻。粒子聚了又散，线条涨了又落——用极小的动态承载怅惘、平静这类"低唤起"情绪，正是抒情类动画的差异化空间。</p><span class="tag">低唤起情绪</span><span class="tag">慢节奏</span></div>
+    <div class="card"><h3>系列化与个人风格一致性</h3><p>同一套视觉语法持续输出，观众刷到任何一帧都能认出"这是思花"。对账号化运营来说，风格一致性比单条爆款更值钱——色板、字库、运动曲线都应当固定下来成为"签名"。</p><span class="tag">风格一致性</span><span class="tag">系列化</span></div>
+    <div class="card"><h3>AI 当画笔，不当主角</h3><p>她公开的流程是：人定视觉概念与文字 → AI 辅助写代码 → 人调参数收尾。创作主权在人的审美判断，AI 只是把"脑海里的画面"执行出来。这也是「飞鸟集」提示词工程的意义所在。</p><span class="tag">AI 辅助</span><span class="tag">人主导审美</span></div>
+  </div>
+  <table>
+    <tr><th>维度</th><th>OpenProcessing 技术流</th><th>思花 视觉诗流</th></tr>
+    <tr><td>核心驱动</td><td>算法与模拟本身（流体、WFC、物理）</td><td>文字情绪（先有诗，再有画面）</td></tr>
+    <tr><td>元素密度</td><td>中高，欣赏"复杂性的涌现"</td><td>极低，欣赏"少而准"</td></tr>
+    <tr><td>节奏</td><td>持续运动，永不静止</td><td>大量"几乎静止"，只在关键处动</td></tr>
+    <tr><td>色彩</td><td>HSB 全谱漂移、高饱和实验</td><td>每期一套固定小色板，情绪化用色</td></tr>
+    <tr><td>时长</td><td>无限循环为主</td><td>10 秒~几分钟的"一条成片"</td></tr>
+    <tr><td>借鉴点</td><td>技法库：流场、噪声、混合模式</td><td>方法论：留白、落款、节奏克制、风格签名</td></tr>
+  </table>
+</section>
+
+<!-- ============ 04 设计原则 ============ -->
+<section id="principles" data-page-node-id="iIzlpx6ndydZPTMfJF0I8e">
+  <h2 data-page-node-id="sYfQ93zEJv5AyEW4PJAy3v"><span class="no" data-page-node-id="TAKBHuJgdEan57NNXiMZ8Y">04</span>动画设计原则</h2>
+  <p class="lead" data-page-node-id="KMwE8rcDoN67eczBYpsFvd">迪士尼十二原则（Frank Thomas & Ollie Johnston, <em data-page-node-id="1CFyT3D8eFdXyOFipcz7SX">The Illusion of Life</em>）是所有动画的地基。下面是每条原则在生成动画 / p5.js 语境下的翻译。</p>
+
+  <div class="principle" data-page-node-id="j45fewxN346INcwaSAwdhy"><div class="n" data-page-node-id="Rila8EBxNoqu9yEulA2KZc">1</div><div data-page-node-id="x8AggHTWAPYY1PjxCyIhfn"><h3 data-page-node-id="FXhimieu3xtmESZQezWC8S">挤压与拉伸<em data-page-node-id="VBdPCjOvdUfBZi8SbY2iw3">Squash & Stretch</em></h3><p data-page-node-id="A1BTtaBQ5CR8q73CzukPnA">运动中保持体积守恒：一个轴压缩 20%，另一个轴就扩张 20%。飞鸟振翅、落叶触水都可以用轻微形变表达重量与弹性。<code data-page-node-id="c3MgnIeiPaFFu4LrPWFHru">scaleX × scaleY ≈ 常数</code>。</p></div></div>
+  <div class="principle" data-page-node-id="tRFG1tAKnHtg3DBFTCowzn"><div class="n" data-page-node-id="wdRj1SGip7p8RXctZh8ZEF">2</div><div data-page-node-id="uFaSGBViyCEdQcshv2DwhD"><h3 data-page-node-id="gIH94gJpkvumE9xMfecPm1">预备动作<em data-page-node-id="hxeQVHYZexYuN3HPkz4e9s">Anticipation</em></h3><p data-page-node-id="HClCByDs0frkZeWqvHTRok">大动作前先做反向小动作，时长约为整体动作的 20%。鸟起飞前先下蹲、诗句出现前光先暗一拍——观众被"预告"了，动作就 readable。</p></div></div>
+  <div class="principle" data-page-node-id="7my45fSBs0d3IReAhWCyjW"><div class="n" data-page-node-id="szUfqwINQtFUnJghQq6CiU">3</div><div data-page-node-id="ROwBZG4DDA9uGaWNvL4zCo"><h3 data-page-node-id="WLD1nY3rUT0AuNY2blHQeb">舞台调度<em data-page-node-id="0oTdD5Uq64NnXb3Lnrhbgm">Staging</em></h3><p data-page-node-id="7oeryclzph2qkCwF5AdJ4Z">一屏一个焦点。非焦点元素降透明度 / 降饱和 / 减速，焦点元素提亮放大。生成动画最容易死在这条：所有粒子都在动 = 什么都没在动。</p></div></div>
+  <div class="principle" data-page-node-id="E1lzJbFwPNSp59OoqBgAHT"><div class="n" data-page-node-id="prxqMdCtkSv18GbtUZCT0L">4</div><div data-page-node-id="833RNeFWHK9wYxjbhZ4V7M"><h3 data-page-node-id="oW1a7fkZSQkic9lSXSa3wY">逐帧 vs 关键帧<em data-page-node-id="YbAzBI6GK9LHwuFZGB1oHF">Straight Ahead / Pose to Pose</em></h3><p data-page-node-id="JKOU3MdGv7cuZS8sYVuATG">粒子、流体、烟雾用逐帧式（straight-ahead，每帧由上一帧推导）；场景切换、诗句节奏用关键帧式（定义起止 + 补间）。你的四幕结构 = pose to pose，幕内粒子 = straight ahead。</p></div></div>
+  <div class="principle" data-page-node-id="BJyKfjWQH4CHjMiwCOt3qe"><div class="n" data-page-node-id="sW6620nCq1juzHRIBiYys5">5</div><div data-page-node-id="ENY6tHw3HJF3671JgW40OZ"><h3 data-page-node-id="zJ8jMaFq53lyNF3EnOB4aC">跟随与重叠<em data-page-node-id="lWphgmmc41qr8BxpYKe7X5">Follow Through & Overlap</em></h3><p data-page-node-id="BroLBUlBBznirEw20gYwAB">没有东西是整体刚性运动的。主元素停下后，次要元素延迟 2–5 帧再停；鸟群过境后，气流与光斑再留半秒。</p></div></div>
+  <div class="principle" data-page-node-id="oMRRJhMCgrDRAGj8G6bf69"><div class="n" data-page-node-id="9Zo2IYLRvYTb6i9Nx46HHw">6</div><div data-page-node-id="zBvEZaXPx7spqBbjPhXw43"><h3 data-page-node-id="1kjCEYAtFifEKmnDVDHfGS">缓入缓出<em data-page-node-id="3U8BNaDvK0nGsvSsTDZ6DZ">Slow In & Slow Out</em></h3><p data-page-node-id="sFCBzGYUnlTu6vCOsBlP5s">入场用 ease-out（快进慢停），退场用 ease-in（慢起快走），屏内移动用 ease-in-out。<code data-page-node-id="GPCQAOH9M3plaKLgRbuHTc">cubic-bezier(0.42, 0, 0.58, 1)</code> 是万能中间值；只有机械运动才配用 linear。</p></div></div>
+  <div class="principle" data-page-node-id="wCbHy5UEe9U9g1rXXI1aMZ"><div class="n" data-page-node-id="E139pkmP951MLM2kewuCV2">7</div><div data-page-node-id="0QG22FKuQgxxV8rxNvPaTB"><h3 data-page-node-id="pGKWELJwes9VvxaIRiG8Kk">弧线运动<em data-page-node-id="dT3gBPq1FuSVShBWxcb6Xk">Arcs</em></h3><p data-page-node-id="P7nDFLvLauoTzktUc6yBg3">有机物的运动轨迹是弧线不是直线。飞鸟的路径用正弦叠加噪声，而不是 <code data-page-node-id="4By3OCQZFT4esDOy159Cue">x += speed</code>。</p></div></div>
+  <div class="principle" data-page-node-id="G5eREnQGrg1sV7zFDM5j2W"><div class="n" data-page-node-id="SNUATJtM1a85mTIRD1O9EE">8</div><div data-page-node-id="N56uMh2hpZa7dNVN7HgPgb"><h3 data-page-node-id="mVSnuI2RMFqEL77LjiTo9J">次级动作<em data-page-node-id="3B2q25UbHhrhFKwHU81DXI">Secondary Action</em></h3><p data-page-node-id="46ywLq8cTWP81GF6YS5A38">为主动作配一个不抢戏的小动作：诗句淡入时，一只远鸟恰好掠过；光斑漂移时，暗角在呼吸。它强化节奏，但永远不能成为第二个焦点。</p></div></div>
+  <div class="principle" data-page-node-id="AK4UZBxVPAxWUhCxhmaL1p"><div class="n" data-page-node-id="h8sbmvlxrIrLBFNaNArYlm">9</div><div data-page-node-id="NWUkBzvxlbb6H5cS7nRnPk"><h3 data-page-node-id="A7CoppoHJq30j9LLniX8jW">时间节奏<em data-page-node-id="3xHl2LX6IRcNBTmICy137t">Timing</em></h3><p data-page-node-id="a7k34dSzbNaBcpO4fo8avK">速度传达重量与情绪。UI 微交互 100–300ms；场景转场 400–800ms；抒情长镜头 1s 以上。你的"每句诗 2s 可见 + 0.4s 淡入淡出"正是电影级 timing。</p></div></div>
+  <div class="principle" data-page-node-id="urHr5efjHnIo0oIAFh4tZg"><div class="n" data-page-node-id="PkcrdLYdz6zsiSsFMEmwDU">10</div><div data-page-node-id="RwJGxmgQ6wyHGK4LAhcSzg"><h3 data-page-node-id="bAhQIfAZrgjgmp7jrZDBxX">夸张<em data-page-node-id="jyBKEjiBvlE1q2Awa7p6i3">Exaggeration</em></h3><p data-page-node-id="DpWHz9IX0CmyGhiEghvUfW">比真实再推 20–50%。真实暮色的色相变化每分钟几度，观众无感；推到每 10 秒可感知的漂移，情绪才成立。</p></div></div>
+  <div class="principle" data-page-node-id="Zr7XVkMFHAPKFILECiTlpD"><div class="n" data-page-node-id="hLbHpIdAvZbMPbfaMEGQP9">11</div><div data-page-node-id="slF5831GCCApYOx93nk5gZ"><h3 data-page-node-id="gmfS1O7mZUcy0ssKtFZJB7">体积感<em data-page-node-id="43RGKiOpkykVCTLoAqCE1N">Solid Drawing</em></h3><p data-page-node-id="Y3oGinoNFQoJkx0h4A3AFO">二维元素也要有重量：影子、透视收缩、遮挡关系。鸟从远处飞近，尺寸应该连续变化，而不是突然变大。</p></div></div>
+  <div class="principle" data-page-node-id="HyZELFONJdwzkibP5K6vPs"><div class="n" data-page-node-id="h1KHy8JmSM3AWjynIIdyXn">12</div><div data-page-node-id="8G9ijJXEjgbco1noIopXtN"><h3 data-page-node-id="mn1AZN1oqj7Ie1g8H4R5mV">吸引力<em data-page-node-id="LxA4QWSSJLthB847hz22h7">Appeal</em></h3><p data-page-node-id="3fotDPgMAPkfIldoFKV1te">前 11 条的总和：观众愿意一直看。对循环动画而言，检验标准是——"第三遍还能发现新细节吗？"</p></div></div>
+
+  <table data-page-node-id="LcbQh06g6QYDmNLiRRLbJk">
+    <tr data-page-node-id="lxnEzt02YDm8ecOeUzoWLa"><th data-page-node-id="nvDg6PstZT4V4VH6R0SRP5">时长</th><th data-page-node-id="Ev1VtF8SVrPJOpTv2mMIMU">体感</th><th data-page-node-id="t5zYJFVBAN5Iv7U8Lc5rPX">典型用途</th></tr>
+    <tr data-page-node-id="xUiKyw1or4N35MazP0Uq5B"><td data-page-node-id="1AtEZ1ijkywn5L2IBJGB7W">50–150ms</td><td data-page-node-id="pf3hkOG9RwEKnOT34FzTxD">干脆</td><td data-page-node-id="8KT9MUvXPrUQ8URmqazKgJ">微交互、按钮反馈</td></tr>
+    <tr data-page-node-id="LYKmXn0W66zlCvmuxGLCnx"><td data-page-node-id="2VTSDzp2IcXRbEHCQgr6uk">150–300ms</td><td data-page-node-id="OXBbGKcUZFkFOi1dGNp2Cy">响应</td><td data-page-node-id="zrWVeupCcJRgGKhmtcM07t">元素入场、hover</td></tr>
+    <tr data-page-node-id="zssfznHDnDGrUI8OXMbvQs"><td data-page-node-id="9s0iXTcZssCCNtvFObCSxO">300–500ms</td><td data-page-node-id="gguCxMcEyznXPLmuNGuiUf">平滑</td><td data-page-node-id="2DrDKsnGZ6kxRq6Dq8aoZf">内容转场</td></tr>
+    <tr data-page-node-id="anPJCHnHbU3A2bkO95m0WJ"><td data-page-node-id="p5G6VVikjsQ4vt2TeJlH6S">500–800ms</td><td data-page-node-id="RCTNg9YoePRNYSou7LAk90">郑重</td><td data-page-node-id="i63Vm9soIjHZfMvppkClE2">幕间切换、主体揭示</td></tr>
+    <tr data-page-node-id="8sbHQ3etN6GtXfNQR0BeRy"><td data-page-node-id="DlA18w0ebb2cPt2cJ4UBV0">1000ms+</td><td data-page-node-id="7WR8bV5GI9McFdQpDEU76B">戏剧性</td><td data-page-node-id="9c5lnP3yq3sQTsjZSIoMCh">诗句长镜头、片头</td></tr>
+  </table>
+</section>
+
+<!-- ============ 04 16:9 ============ -->
+<section id="ratio" data-page-node-id="bDyjmEL4sDpJnW1P0nEQju">
+  <h2 data-page-node-id="6Wjov5pZoCosjwTLbcMu28"><span class="no" data-page-node-id="FZjhsgRAmswAReRxlDFLlh">05</span>16:9 构图原则</h2>
+  <p class="lead" data-page-node-id="CzwFJ9XFqGboyIHsv7pauO">16:9 是电影与视频的黄金比例。生成动画放进 16:9 画布时，构图比技术更能决定"像作品还是像 demo"。</p>
+  <div class="grid g2" data-page-node-id="UH7oA3bQZEc2WE2YThWebw">
+    <div class="card" data-page-node-id="c7HZXgUjL2Q2tJS9sVp6U3"><h3 data-page-node-id="7n36RREgYLhHU2sC3zD4he">三分法与视平线</h3><p data-page-node-id="vop97AQWjL3fPEbpZ6adJ0">横向三等分线放地平线 / 云层，纵向三等分线放主体。暮色天空占上 2/3、飞鸟压在下 1/3 线上，画面立即稳定。</p></div>
+    <div class="card" data-page-node-id="uepwFtYLu8PmyiBtxzr5iS"><h3 data-page-node-id="N84PIU7Ar8CcW7DAgqiHmS">三层景深</h3><p data-page-node-id="26qRWBEEyK2n2ZWUBXe8Dp">前景（暗、大、虚化）/ 中景（主体、清晰）/ 背景（亮、慢、低对比）。哪怕全是粒子，也要人为分出三层速度与三种透明度。</p></div>
+    <div class="card" data-page-node-id="k4UwxJHgVu5xql0hwKhI36"><h3 data-page-node-id="SCnWnEH9UqkQgcy36ihpPS">运动的方向性</h3><p data-page-node-id="28BPbAkUxk8wp82YOyy2G0">16:9 是横向画布，横向流动（左→右）读作"顺流、时间前进"；逆向流动制造张力。视线习惯从左上入、右下出，诗句落点放在右下三分之一处最舒服。</p></div>
+    <div class="card" data-page-node-id="rK8NqbpVQ58VIp4n5HyHF0"><h3 data-page-node-id="EM6wBSyunmwxZiC1UTezCT">字幕安全区</h3><p data-page-node-id="jYjtmqyiDF5a8ZM9LATj5y">文字距边缘至少留 5% 画布高度的边距；关键信息避开四角与正中央（中央留给主体），放在下三分之一偏上或偏下。</p></div>
+    <div class="card" data-page-node-id="95hQysIDJCTIPOqtwLun5F"><h3 data-page-node-id="SA7VKlRIqJXCBYbPcyXkRF">负空间呼吸</h3><p data-page-node-id="iHcMjZsCEI8fTysSrgpkcP">热门作品共同点：留白 > 元素。画面至少 60% 是"安静的"（渐变天空、暗部），40% 以下承载运动，节奏感由静面积撑起来。</p></div>
+    <div class="card" data-page-node-id="OUjFNiEc8xRjMwjTfzrq3P"><h3 data-page-node-id="xmUm6o1FrObCKEjB6gwWB8">首尾帧即海报</h3><p data-page-node-id="sf1EEajVGMQtSPSeEFMfg9">循环动画任何一帧暂停下来都应该能当壁纸。写代码前先画 3 张关键帧静帧（起、中、止），倒推参数。</p></div>
+  </div>
+</section>
+
+<!-- ============ 05 演示 ============ -->
+<section id="demos" data-page-node-id="OyBEOrPFHyLfrk9WD0roXt">
+  <h2 data-page-node-id="coev6MwV1kjRYc3r7p7nig"><span class="no" data-page-node-id="yiXKAIY2rLGRwwhJx3amtL">06</span>活体演示（可直接搬运的代码）</h2>
+  <p class="lead" data-page-node-id="B8HHOXbyxLerde85eCNggM">四个 16:9 演示，覆盖「飞鸟集」最核心的三类需求，外加一个思花风格的"视觉诗"对照。查看源码即可复制参数。</p>
+
+  <div class="demo" data-page-node-id="cXr8KaA5laVG8x4AtBGd4C">
+    <div class="head" data-page-node-id="YiZ1vno9Qp2Aly28Avbv9H"><h3 data-page-node-id="uABLxgPBO6Tma9IcMsH30q">演示 A · 流场粒子 + ADD 泛光轨迹</h3><span data-page-node-id="IBSAJOlcil2YSjisSDJJse">flow field · trail · blendMode(ADD)</span></div>
+    <div class="stage" data-page-node-id="KWHg6eDRU0FpPsZy1Xwfvv"><div id="demoA" data-page-node-id="3sWdM0Ixley5GLtEZF53xs"></div></div>
+    <div class="note" data-page-node-id="EbiAtlGOc2nhrpY5wDJE6V">Perlin 噪声驱动的角度场，粒子留下渐隐轨迹，重叠处亮度叠加。暮色 HSB 色相随时间缓慢漂移——这正是 Spectral Orbit 与 Fluid 类作品的底层配方。</div>
+  </div>
+
+  <div class="demo" data-page-node-id="vR16jJiN0LFKiSeho9n25N">
+    <div class="head" data-page-node-id="cm6cAfrsf2iRFfG7AvpTkF"><h3 data-page-node-id="avgxh3DrpLH1UanLYRXwDB">演示 B · 有机噪声网格（永不停滞）</h3><span data-page-node-id="1WjY430GplJ4XND6PE19Nu">seamless organic grid · circular noise sampling</span></div>
+    <div class="stage" data-page-node-id="JtR0LxCq4s2Lmu1XWKJ5a6"><div id="demoB" data-page-node-id="CRrC3wDrOsIVhcCIzNHdhW"></div></div>
+    <div class="note" data-page-node-id="GqSQ8LBgjWJZuRIUS40sTV">噪声在圆周上采样（cos/sin 作为噪声坐标），保证无限循环且永不卡在噪声峰值——网格像呼吸一样起伏。Okazz 系列与 Seamless Organic Grid 的核心手法。</div>
+  </div>
+
+  <div class="demo" data-page-node-id="VjB2V9RgIqWV9vQQTEh6Tu">
+    <div class="head" data-page-node-id="J1ZlUy3lsIAaGxcGOiMaKk"><h3 data-page-node-id="twOKpBpS8YLFsJEGnAHXoA">演示 C · 诗句逐字入场（预备 + 缓动）</h3><span data-page-node-id="HHUVmy7lCnBMJlRrSQp7J0">kinetic typography · ease-out · anticipation</span></div>
+    <div class="stage" data-page-node-id="WPpMPH65fAb1WQIdTC9Tpw"><div id="demoC" data-page-node-id="DnY0SO4sd8BwQWHjs5mDpC"></div></div>
+    <div class="note" data-page-node-id="o7h0qRnHP2DkezdFbBGuSk">每字错峰入场：先暗一拍（预备动作），再以 ease-out 浮现，尾字带轻微过冲回弹。配合暗角与颗粒，文字与画面在同一质感里。</div>
+  </div>
+
+  <div class="demo">
+    <div class="head"><h3>演示 D · 思花式视觉诗（墨线 · 留白 · 落款）</h3><span>sihua-style · minimal · ink line · vertical text</span></div>
+    <div class="stage" style="background:#e9e4d8"><div id="demoD"></div></div>
+    <div class="note">思花方法论的浓缩复刻：宣纸底、一条噪声驱动"呼吸"的墨线、几粒聚散的墨点，画面静满 70% 时长后竖排短句才作为"落款"浮现。注意它与前三个演示的密度差——少而准。</div>
+  </div>
+</section>
+
+<!-- ============ 06 落地 ============ -->
+<section id="apply" data-page-node-id="9k52oWiwV5UlIddNm0BzrW">
+  <h2 data-page-node-id="1zHngUB615co2SET05lGbD"><span class="no" data-page-node-id="e6ANgX43iRglK4Jz4hMr2O">07</span>落到「飞鸟集」的五条建议</h2>
+  <div class="scene" data-page-node-id="SH3egJKmFFHbCNih7cZFq0"><h3 data-page-node-id="xN7lphb0kPHTTmaBqQmcga">① 固定 16:9 舞台，全屏自适应</h3><p data-page-node-id="Z21C6H1cE1IzRveFvJ19iy">内部逻辑坐标恒为 1600×900，<code data-page-node-id="65AF7e27v3ejeB4SF2LrI6">scale(min(width/1600, height/900))</code> 居中缩放，上下或左右留黑边（letterbox），任何屏幕下构图不变形。</p></div>
+  <div class="scene" data-page-node-id="glAqRDfZFgxWOcTANOGWhJ"><h3 data-page-node-id="WOqxeJzYXWeXBM245aYFfm">② 每幕一个焦点，其余降级为背景</h3><p data-page-node-id="4MNV27KqdT2PcZPlM1sJov">鸟群过境时流场减速降透明；诗句入场时天空色相漂移暂停半秒。用"谁在动、动多快"做调度，而不是全部同时满速。</p></div>
+  <div class="scene" data-page-node-id="hbnRs9BAWg1ETbz7CPAMXg"><h3 data-page-node-id="SUNJcT1pdWssTkYBj9m856">③ 给转场加预备动作</h3><p data-page-node-id="wKhvwzFwVX6YYr46fp19qr">幕与幕之间加 0.3s 的"吸气"：亮度轻微下降或粒子短暂收拢，再释放到下一幕——观众的感觉是"有呼吸"，原理就是 anticipation。</p></div>
+  <div class="scene" data-page-node-id="vt7ulWQpk4UM7NvrSAVHg4"><h3 data-page-node-id="4n38rfiHPiiamc3HXuR3KA">④ 循环无缝 & 首帧即海报</h3><p data-page-node-id="TCADTiXIG6EgNmvmDoWBwh">所有时间参数用 <code data-page-node-id="17PXJwnw22yn9w0EjeMLmk">angle = t × 2π / T</code>（T = 16s）驱动而非累加计数器，天然无缝；写完先暂停抽查 5 帧，每一帧都应可当壁纸。</p></div>
+  <div class="scene"><h3>⑤ 学思花：给每一幕留一句"落款"</h3><p>视觉先铺垫，诗句最后到位；每幕至少留 1/3 时长的"几乎静止"段落（只有暗角呼吸、颗粒漂移），让下一句诗的出现有重量。同时把色板、字库、运动曲线固定成"签名"——观众认的是风格，不是单条视频。</p></div>
+</section>
+
+<p class="foot-note" data-page-node-id="m3SZls8CzTbO29FwpGH93V">—— 灵感来源：OpenProcessing Trending / Loved this Week · 思花 · The Illusion of Life ——</p>
+</div>
+
+<script>
+/* ---------- Demo A: flow field + ADD trails ---------- */
+new p5(p => {
+  const W = 720, H = 405; let parts = [];
+  p.setup = () => { let c = p.createCanvas(W, H); p.parent(c, 'demoA');
+    p.colorMode(p.HSB, 360, 100, 100, 100); p.background(235, 60, 8);
+    for (let i = 0; i < 420; i++) parts.push({x: p.random(W), y: p.random(H)});
+  };
+  p.draw = () => {
+    p.noStroke(); p.fill(235, 60, 8, 6); p.rect(0, 0, W, H); // slow fade
+    p.blendMode(p.ADD);
+    const hue = (p.frameCount * 0.06) % 360;
+    for (let pt of parts) {
+      const a = p.noise(pt.x * 0.004, pt.y * 0.004, p.frameCount * 0.004) * p.TWO_PI * 3;
+      const nx = pt.x + p.cos(a) * 1.6, ny = pt.y + p.sin(a) * 1.6;
+      p.stroke((hue + p.noise(pt.x*0.01, pt.y*0.01)*60) % 360, 70, 85, 9);
+      p.strokeWeight(1.4); p.line(pt.x, pt.y, nx, ny);
+      pt.x = nx; pt.y = ny;
+      if (pt.x < 0 || pt.x > W || pt.y < 0 || pt.y > H) { pt.x = p.random(W); pt.y = p.random(H); }
+    }
+    p.blendMode(p.BLEND);
+    // vignette
+    p.drawingContext.globalCompositeOperation = 'source-over';
+    const g = p.drawingContext.createRadialGradient(W/2,H/2,H*0.35,W/2,H/2,W*0.62);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.55)');
+    p.noStroke(); p.drawingContext.fillStyle = g; p.drawingContext.fillRect(0,0,W,H);
+  };
+});
+
+/* ---------- Demo B: organic grid on circular noise ---------- */
+new p5(p => {
+  const W = 720, H = 405, N = 14, M = 25;
+  p.setup = () => { let c = p.createCanvas(W, H); p.parent(c, 'demoB'); p.noStroke(); };
+  p.draw = () => {
+    p.background(8, 10, 26);
+    const t = p.frameCount * 0.008; const r = 1.8; // radius in noise space
+    for (let i = 0; i < N; i++) for (let j = 0; j < M; j++) {
+      const x = (i + 0.5) * W / N, y = (j + 0.5) * H / M;
+      const n = p.noise(p.cos(t) * r + i * 0.25, p.sin(t) * r + j * 0.25);
+      const d = p.map(n, 0.15, 0.85, 2, W / N * 0.92);
+      const hu = p.map(n, 0, 1, 18, 48); // gold → ember
+      p.fill(hu, 72, 30 + n * 45, 90);
+      p.circle(x, y, d);
+    }
+  };
+});
+
+/* ---------- Demo C: kinetic typography ---------- */
+new p5(p => {
+  const W = 720, H = 405; const line = "使生如夏花之绚烂";
+  const en = "Let life be beautiful like summer flowers";
+  const chars = []; const CYCLE = 400, HOLD = 120;
+  p.setup = () => { let c = p.createCanvas(W, H); p.parent(c, 'demoC'); p.textAlign(p.CENTER, p.CENTER);
+    [...line].forEach((ch, i) => chars.push({ch, i}));
+  };
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+  p.draw = () => {
+    const f = p.frameCount % CYCLE;
+    p.background(8, 10, 26);
+    // sky glow
+    for (let y = 0; y < H; y += 4) {
+      const k = y / H;
+      p.noStroke(); p.fill(230 - k * 30, 55, 8 + k * 10); p.rect(0, y, W, 4);
+    }
+    p.textFont('Noto Serif SC');
+    chars.forEach(o => {
+      const start = 20 + o.i * 9;           // stagger
+      const t = p.constrain((f - start) / 55, 0, 1);
+      const e = easeOut(t);
+      let sc = 0.86 + e * 0.14 + (t > 0.85 ? Math.sin((t - 0.85) * 12) * 0.03 * (1 - t) : 0); // overshoot settle
+      const fadeOut = f > CYCLE - HOLD ? p.map(f, CYCLE - HOLD, CYCLE, 1, 0) : 1;
+      p.fill(255, 214, 140, 235 * e * fadeOut);
+      p.textSize(44 * sc);
+      p.text(o.ch, W/2 + (o.i - (line.length-1)/2) * 52, H/2 - 10 + (1 - e) * 14);
+    });
+    // english italic
+    p.textFont('Cormorant Garamond');
+    const et = p.constrain((f - 110) / 60, 0, 1);
+    const fadeOut = f > CYCLE - HOLD ? p.map(f, CYCLE - HOLD, CYCLE, 1, 0) : 1;
+    p.fill(160, 170, 200, 200 * easeOut(et) * fadeOut);
+    p.textStyle(p.ITALIC); p.textSize(17);
+    p.text(en, W/2, H/2 + 46);
+    // film grain
+    p.fill(255, 3); for (let i = 0; i < 90; i++) p.rect(p.random(W), p.random(H), 1.5, 1.5);
+  };
+});
+
+/* ---------- Demo D: sihua-style visual poem (ink line + vertical seal text) ---------- */
+new p5(p => {
+  const W = 720, H = 405;
+  const poem = "风起时 我数着光";
+  const CYCLE = 560, HOLD = 130;
+  p.setup = () => { let c = p.createCanvas(W, H); p.parent(c, 'demoD'); p.textAlign(p.CENTER, p.CENTER); };
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+  p.draw = () => {
+    const f = p.frameCount % CYCLE;
+    // rice-paper background with soft warm vignette
+    p.background(238, 233, 220);
+    const g = p.drawingContext.createRadialGradient(W/2, H/2, H*0.2, W/2, H/2, W*0.65);
+    g.addColorStop(0,'rgba(255,252,240,0.9)'); g.addColorStop(1,'rgba(215,205,182,0.55)');
+    p.drawingContext.fillStyle = g; p.drawingContext.fillRect(0,0,W,H);
+    // one breathing ink line (the ONLY protagonist)
+    const t = p.frameCount * 0.006;
+    p.noFill(); p.stroke(40, 38, 42, 210); p.strokeWeight(1.6);
+    p.beginShape();
+    for (let x = W*0.14; x <= W*0.86; x += 4) {
+      const k = (x - W*0.14) / (W*0.72);
+      const y = H*0.52
+        + Math.sin(k * Math.PI) * p.noise(x*0.006, t) * 46 * Math.sin(t*1.4) // breathing amplitude
+        + p.noise(x*0.013, t*0.7) * 18 - 9;                                  // small tremor
+      p.curveVertex(x, y);
+    }
+    p.endShape();
+    // a few ink dots drift & gather along the line (secondary action)
+    p.noStroke();
+    for (let i = 0; i < 7; i++) {
+      const ph = t * 0.8 + i * 0.9;
+      const k = 0.5 + 0.34 * Math.sin(i * 2.1 + t * 0.5);
+      const x = W*0.14 + k * W*0.72;
+      const y = H*0.52 + Math.sin(k*Math.PI) * p.noise(x*0.006, t) * 46 * Math.sin(t*1.4);
+      const d = 1.5 + 2.5 * (0.5 + 0.5*Math.sin(ph));
+      p.fill(40, 38, 42, 60 + 70 * (0.5 + 0.5*Math.sin(ph)));
+      p.circle(x + Math.sin(ph*1.3+i)*6, y - 8 - i*1.5, d);
+    }
+    // vertical poem appears only in the last 30% — the "seal"
+    if (f > CYCLE * 0.68) {
+      const tt = p.constrain((f - CYCLE*0.68) / 70, 0, 1);
+      const fadeOut = f > CYCLE - HOLD ? p.map(f, CYCLE - HOLD, CYCLE, 1, 0) : 1;
+      p.textFont('Noto Serif SC'); p.textSize(19);
+      const chars = [...poem];
+      chars.forEach((ch, i) => {
+        const e = easeOut(p.constrain((tt - i*0.06) / 0.6, 0, 1));
+        p.fill(45, 42, 46, 220 * e * fadeOut);
+        p.text(ch, W*0.82, H*0.30 + i * 26 + (1-e)*8);
+      });
+      // red seal stamp
+      const se = easeOut(p.constrain((tt - 0.75) / 0.25, 0, 1));
+      p.noStroke(); p.fill(168, 52, 44, 200 * se * fadeOut);
+      p.rect(W*0.82 - 9, H*0.30 + chars.length*26 + 10, 18, 18, 3);
+    }
+  };
+});
+</script>
+</body>
+</html>

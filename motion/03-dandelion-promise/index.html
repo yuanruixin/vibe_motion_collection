@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="sXndWmKc5c6cj0hHK8RgQF">
+<head data-page-node-id="JkQvs51Yy2pXSWpDkrYJHd">
+<meta charset="UTF-8" data-page-node-id="8I3hvE96Z9EAHbrx7oelQW">
+<title>蒲公英的约定 · 视觉诗</title>
+<script src="https://cdn.jsdelivr.net/npm/p5@1.11.3/lib/p5.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;400;500&family=Cormorant+Garamond:ital@1&display=swap" rel="stylesheet" data-page-node-id="L30XfbTt4yx2TxX1sjc6Vs">
+<style>
+  html,body{margin:0;height:100%;background:#05060c;overflow:hidden;
+            display:flex;align-items:center;justify-content:center}
+  #stage{width:1600px;height:900px;transform-origin:center center;flex:0 0 auto}
+  #stage canvas{display:block;box-shadow:0 30px 90px rgba(0,0,0,.65)}
+</style>
+</head>
+<body data-page-node-id="EMeOxZ5yS8HgFnLJyZygoq">
+<div id="stage" data-page-node-id="3AMpdJj7WynbCluIyPHZYt"></div>
+<script>
+/* ═════════════ 可配置区 ═════════════ */
+const CONFIG = {
+  W: 1600, H: 900,
+  poem: ["风吹散了蒲公英", "吹不散那年约定"],   // 竖排两列，从右往左读（原创句，非歌词）
+  subtitleEn: "The wind scatters the dandelion, but never the promise we made.",
+  seal: "约",
+  dur: 32,                                // 总时长（秒），无缝循环
+  textAt: 0.66,                           // 落款浮现时刻（0~1）
+  wind: { rise0: 0.38, rise1: 0.48, fall0: 0.62, fall1: 0.82 },  // 风的包络
+  detach0: 0.395, detachSpan: 0.20,       // 绒毛离散时刻窗口
+  bloomAt: 0.52,                          // 记忆光晕峰值时刻
+  palette: {                              // 暮色温柔：固定小色板
+    bgTop:  [21,26,54],  bgBot: [6,8,18],
+    neb1:   [88,66,130], neb2:  [30,88,104],
+    glow:   [255,208,130],                // 暖金（地平线余晖 / 光晕 / 亮籽）
+    paper:  [246,240,226],                // 月白（绒毛与种子）
+    hillFar:[27,33,62],  hillNear:[13,17,34],
+    stem:   [170,182,152],
+    star:   [228,231,242],
+    seal:   [176,54,44],
+    text:   [240,235,224]
+  }
+};
+/* ════════════════════════════════════════════════
+   五层结构：
+   1 底质层  暮色渐变 + 漂移星云 + 地平线余晖
+   2 景深层  双层远山剪影 + 星空 + 近景草丛
+   3 主体层  蒲公英（茎 + 240 绒毛病球，斐波那契球面缓旋）
+             风起→绒毛离散为种子群，ADD 发光轨迹飘散
+   4 生命层  常驻漂游种子 + 微尘萤火 + 远景失焦光斑
+             + 风痕流线 + 离散峰值记忆光晕
+   5 质感层  胶片颗粒 + 呼吸暗角 + 首尾落幕淡化
+   ════════════════════════════════════════════════ */
+
+const P = CONFIG, LP = P.palette, FPS = 60, CYCLE = P.dur * FPS;
+const CN = "'Noto Serif SC','Songti SC','STSong','SimSun',serif";
+const EN = "'Cormorant Garamond','Times New Roman',serif";
+
+new p5(p => {
+  let grain, trail, stage;
+  const clamp01 = t => t < 0 ? 0 : t > 1 ? 1 : t;
+  const easeOut = t => 1 - Math.pow(1 - t, 3);
+  const sstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+
+  // 确定性随机（布局稳定，可复现）
+  function mulberry32(seed){
+    return function(){
+      seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+      let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  const rnd = mulberry32(20260830);
+
+  // 循环噪声：角度驱动，天然无缝
+  const loopNoise = (x, y, a, s) => p.noise(x*s, y*s, Math.cos(a)*0.85+3.1, Math.sin(a)*0.85+3.1);
+
+  /* —— 蒲公英几何 —— */
+  const STEM_BX = P.W*0.335, STEM_BY = P.H*1.03;      // 茎根部
+  const HX0 = P.W*0.362, HY0 = P.H*0.415;             // 球心（无风时）
+  const R0 = P.H*0.118;                               // 绒球半径
+
+  /* —— 主体层 · 绒毛（斐波那契球面） —— */
+  const FN = 240;
+  let florets = [];
+  function initFlorets(){
+    florets = [];
+    const GA = Math.PI * (1 + Math.sqrt(5));
+    for (let k = 0; k < FN; k++){
+      const phi = Math.acos(1 - 2*(k + 0.5)/FN);
+      const theta = GA * k;
+      const ux = Math.sin(phi)*Math.cos(theta);
+      const uy = Math.cos(phi);
+      const uz = Math.sin(phi)*Math.sin(theta);
+      florets.push({
+        ux, uy, uz,
+        spin: rnd()*Math.PI*2,                        // 伞毛基角
+        tw: rnd()*Math.PI*2,                          // 颤动相位
+        depth: 0.72 + rnd()*0.42,                     // 个体大小/景深
+        // 迎风面（左侧 ux<0）先离散；约 4% 的绒毛永不离散——"吹不散"
+        det: rnd() < 0.04 ? 9 : P.detach0 + P.detachSpan * clamp01(0.45*rnd() + 0.55*(0.5 + 0.5*ux)),
+        gone: false
+      });
+    }
+  }
+
+  /* —— 主体层 · 离散种子 —— */
+  let seeds = [];
+  function makeSeed(x, y, f){
+    return {
+      x, y, px: x, py: y,
+      vx: (f.ux*1.6 + 1.2 + rnd()*1.2),
+      vy: (f.uy*1.3 - 0.7 - rnd()*0.6),
+      sc: f.depth,
+      ph: rnd()*Math.PI*2,
+      col: rnd() < 0.72 ? LP.paper : LP.glow,
+      age: 0, dead: false
+    };
+  }
+
+  /* —— 生命层 · 常驻漂游种子（循环不断） —— */
+  const AN = 64;
+  let drift = [];
+  function initDrift(){
+    drift = [];
+    for (let i = 0; i < AN; i++){
+      drift.push({
+        x: rnd()*P.W, y: P.H*(0.08 + rnd()*0.72),
+        sp: 0.25 + rnd()*0.55,
+        ph: rnd()*Math.PI*2,
+        amp: 14 + rnd()*30,
+        sc: 0.45 + rnd()*0.6,
+        far: rnd() < 0.45                             // 远景组更淡更小
+      });
+    }
+  }
+
+  /* —— 生命层 · 微尘萤火 —— */
+  const DUST_N = 56;
+  let dust = [];
+  function initDust(){
+    dust = [];
+    for (let i = 0; i < DUST_N; i++){
+      dust.push({
+        bx: rnd(), by: rnd()*0.85,
+        amp: 14 + rnd()*34, sp: 0.4 + rnd()*1.0,
+        ph: rnd()*Math.PI*2, r: 0.5 + rnd()*1.5, tw: 0.4 + rnd()*0.6
+      });
+    }
+  }
+
+  /* —— 景深层 · 星空 / 草丛 —— */
+  const STAR_N = 130, GRASS_N = 46;
+  let stars = [], grass = [];
+  function initScene(){
+    stars = [];
+    for (let i = 0; i < STAR_N; i++){
+      stars.push({ x: rnd()*P.W, y: rnd()*P.H*0.62,
+                   r: 0.4 + rnd()*1.1, ph: rnd()*Math.PI*2, sp: 0.6 + rnd()*1.6 });
+    }
+    grass = [];
+    for (let i = 0; i < GRASS_N; i++){
+      grass.push({ x: rnd()*P.W, h: 36 + rnd()*96,
+                   lean: (rnd()-0.5)*14, ph: rnd()*Math.PI*2, w: 1 + rnd()*1.4 });
+    }
+  }
+
+  /* —— 生命层 · 风痕流线 —— */
+  const GUST_N = 15;
+  let gusts = [];
+  function initGusts(){
+    gusts = [];
+    for (let i = 0; i < GUST_N; i++){
+      gusts.push({ y0: HY0 - 260 + rnd()*560, off: rnd(),
+                   sp: 0.55 + rnd()*0.7, len: 130 + rnd()*150, bow: (rnd()-0.5)*70 });
+    }
+  }
+
+  /* —— 生命层 · 远景失焦光斑（大种子虚影） —— */
+  const BOKEH_N = 6;
+  let bokeh = [];
+  function initBokeh(){
+    bokeh = [];
+    for (let i = 0; i < BOKEH_N; i++){
+      bokeh.push({ bx: rnd(), by: 0.15 + rnd()*0.55, r: 46 + rnd()*80,
+                   sp: 0.05 + rnd()*0.08, ph: rnd()*Math.PI*2,
+                   c: rnd() < 0.5 ? LP.paper : LP.glow });
+    }
+  }
+
+  function roundRect(ctx, x, y, w, h, r){
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
+    else {
+      ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+    }
+    ctx.fill();
+  }
+
+  p.setup = () => {
+    stage = document.getElementById('stage');
+    p.createCanvas(P.W, P.H).parent(stage);
+    p.pixelDensity(1); p.frameRate(FPS);
+    fit(); window.addEventListener('resize', fit);
+
+    grain = p.createGraphics(P.W + 12, P.H + 12);
+    grain.pixelDensity(1); grain.noStroke(); grain.randomSeed(7);
+    for (let i = 0; i < 3400; i++){
+      const v = grain.random() < 0.5;
+      grain.fill(v ? 220 : 10, v ? 214 : 12, v ? 200 : 20, grain.random(3, 13));
+      grain.circle(grain.random(grain.width), grain.random(grain.height), grain.random(0.5, 1.6));
+    }
+
+    trail = p.createGraphics(P.W, P.H);
+    trail.pixelDensity(1);
+
+    initFlorets(); initDrift(); initDust(); initScene(); initGusts(); initBokeh();
+    seeds = [];
+  };
+
+  function fit(){
+    const s = Math.min(window.innerWidth / P.W, window.innerHeight / P.H);
+    stage.style.transform = `scale(${s})`;
+  }
+
+  // 风的包络：起—持—息，带阵风起伏
+  function windEnv(T){
+    const w = sstep(P.wind.rise0, P.wind.rise1, T) * (1 - sstep(P.wind.fall0, P.wind.fall1, T));
+    return w * (0.82 + 0.18*Math.sin(T*Math.PI*2*7 + 1.3));
+  }
+
+  // 画一枚种子/绒毛伞：伞心 (x,y)，朝 tilt 方向张开 190° 扇面
+  function drawPappus(ctx, x, y, tilt, scale, col, alpha){
+    const n = 9, span = Math.PI*1.06, L = 9.5*scale;
+    ctx.strokeStyle = `rgba(${col.join(',')},${alpha})`;
+    ctx.lineWidth = Math.max(0.6, 0.85*scale);
+    ctx.beginPath();
+    for (let i = 0; i < n; i++){
+      const ang = tilt - span/2 + span*(i/(n-1));
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(ang)*L, y + Math.sin(ang)*L);
+    }
+    ctx.stroke();
+    ctx.fillStyle = `rgba(${col.join(',')},${Math.min(1, alpha*1.6)})`;
+    ctx.beginPath(); ctx.arc(x, y, 1.15*scale, 0, 6.2832); ctx.fill();
+  }
+
+  p.draw = () => {
+    const f  = p.frameCount % CYCLE;
+    const T  = f / CYCLE;
+    const a  = T * Math.PI * 2;
+    const wind = windEnv(T);
+    const ctx = p.drawingContext;
+
+    if (f === 0){                                     // 循环重置：绒球复原
+      seeds = [];
+      for (const fl of florets) fl.gone = false;
+      trail.clear();
+    }
+
+    // 球心随风弯伏（时间基准，必定到位）
+    const sway = 6*Math.sin(a*3 + 0.6) + wind*52;
+    const HX = HX0 + sway, HY = HY0 + Math.abs(wind*52)*0.10;
+    const rotY = a*0.5;                               // 绒球缓旋
+
+    /* ══ 1 底质层：暮色渐变 + 星云 + 地平线余晖 ══ */
+    const bg = ctx.createLinearGradient(0, 0, 0, P.H);
+    bg.addColorStop(0, `rgb(${LP.bgTop.join(',')})`);
+    bg.addColorStop(1, `rgb(${LP.bgBot.join(',')})`);
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, P.W, P.H);
+
+    [
+      { c: LP.neb1, x:0.72, y:0.24, r:430, al:0.11, ph:0.4 },
+      { c: LP.neb2, x:0.20, y:0.60, r:460, al:0.09, ph:2.6 },
+      { c: LP.glow, x:0.36, y:0.86, r:520, al:0.10, ph:4.2 },   // 地平线余晖
+    ].forEach(n => {
+      const nx = P.W*n.x + Math.sin(a*0.5 + n.ph)*54;
+      const ny = P.H*n.y + Math.cos(a*0.37 + n.ph)*30;
+      const rg = ctx.createRadialGradient(nx, ny, 0, nx, ny, n.r);
+      rg.addColorStop(0, `rgba(${n.c.join(',')},${n.al*(0.8 + 0.2*Math.sin(a + n.ph))})`);
+      rg.addColorStop(1, `rgba(${n.c.join(',')},0)`);
+      ctx.save(); ctx.fillStyle = rg;
+      ctx.beginPath(); ctx.arc(nx, ny, n.r, 0, 6.2832); ctx.fill(); ctx.restore();
+    });
+
+    /* ══ 2 景深层：星空 + 双层远山 + 草丛 ══ */
+    ctx.save();
+    for (const s of stars){
+      const tw = 0.5 + 0.5*Math.sin(a*s.sp + s.ph);
+      ctx.fillStyle = `rgba(${LP.star.join(',')},${0.05 + 0.24*tw})`;
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 6.2832); ctx.fill();
+    }
+    // 远山（远 / 近两层剪影）
+    [{ y0: 0.74, amp: 46, c: LP.hillFar,  al: 0.85, k: 3.1 },
+     { y0: 0.84, amp: 60, c: LP.hillNear, al: 1.00, k: 5.7 }].forEach(h => {
+      ctx.fillStyle = `rgba(${h.c.join(',')},${h.al})`;
+      ctx.beginPath(); ctx.moveTo(0, P.H);
+      for (let x = 0; x <= P.W; x += 10){
+        const y = P.H*h.y0 + (loopNoise(x, h.k*137.5, a*0.15, 0.0016) - 0.5)*h.amp*2;
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(P.W, P.H); ctx.closePath(); ctx.fill();
+    });
+    // 近景草丛（随风弯伏）
+    ctx.lineCap = 'round';
+    for (const g of grass){
+      const bend = g.lean + Math.sin(a*2 + g.ph)*4 + wind*46;
+      ctx.strokeStyle = `rgba(${LP.hillNear.join(',')},0.95)`;
+      ctx.lineWidth = g.w;
+      ctx.beginPath();
+      ctx.moveTo(g.x, P.H + 4);
+      ctx.quadraticCurveTo(g.x + bend*0.3, P.H - g.h*0.6, g.x + bend, P.H - g.h);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    /* ══ 3 主体层 · 茎 ══ */
+    ctx.save();
+    ctx.strokeStyle = `rgba(${LP.stem.join(',')},0.55)`;
+    ctx.lineWidth = 2.4; ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(STEM_BX, STEM_BY);
+    ctx.quadraticCurveTo(STEM_BX + sway*0.35 - 26, (STEM_BY + HY)*0.55, HX, HY);
+    ctx.stroke();
+    // 基部两叶
+    ctx.lineWidth = 1.6;
+    ctx.strokeStyle = `rgba(${LP.stem.join(',')},0.32)`;
+    ctx.beginPath();
+    ctx.moveTo(STEM_BX + 4, STEM_BY - 30);
+    ctx.quadraticCurveTo(STEM_BX - 52, STEM_BY - 74, STEM_BX - 88 + wind*20, STEM_BY - 62);
+    ctx.moveTo(STEM_BX + 6, STEM_BY - 22);
+    ctx.quadraticCurveTo(STEM_BX + 62, STEM_BY - 60, STEM_BX + 96 + wind*24, STEM_BY - 48);
+    ctx.stroke();
+    ctx.restore();
+
+    /* ══ 3 主体层 · 绒球（未离散绒毛） ══ */
+    const trem = 1.1 + wind*5.5;
+    let remain = 0;
+    ctx.save();
+    for (const fl of florets){
+      if (fl.gone) continue;
+      // 球面缓旋（绕 Y 轴）
+      const cx = fl.ux*Math.cos(rotY) + fl.uz*Math.sin(rotY);
+      const cz = -fl.ux*Math.sin(rotY) + fl.uz*Math.cos(rotY);
+      const zf = 0.5 + 0.5*cz;                        // 0 远 1 近
+      const tr1 = (loopNoise(fl.spin*40, fl.tw*40, a, 0.9) - 0.5)*trem;
+      const tr2 = (loopNoise(fl.tw*40, fl.spin*40, a + 2.1, 0.9) - 0.5)*trem;
+      const lean = wind*16*(0.5 - 0.5*fl.ux);         // 余绒顺风倾伏
+      const fx = HX + cx*R0*fl.depth + tr1 + lean;
+      const fy = HY + fl.uy*R0*fl.depth + tr2;
+      if (T >= fl.det){                                // 离散 → 化为种子
+        fl.gone = true;
+        seeds.push(makeSeed(fx, fy, fl));
+        continue;
+      }
+      remain++;
+      const al = (0.22 + 0.62*zf) * (0.8 + 0.2*Math.sin(a*2.2 + fl.tw));
+      drawPappus(ctx, fx, fy, fl.spin + a*0.12, fl.depth*(0.8 + 0.3*zf), LP.paper, al);
+    }
+    // 球心绒核（残存时）
+    if (remain > 0){
+      const core = clamp01(remain / FN);
+      const cg = ctx.createRadialGradient(HX, HY, 0, HX, HY, R0*0.55);
+      cg.addColorStop(0, `rgba(${LP.glow.join(',')},${0.10 + 0.08*core})`);
+      cg.addColorStop(1, `rgba(${LP.glow.join(',')},0)`);
+      ctx.fillStyle = cg;
+      ctx.beginPath(); ctx.arc(HX, HY, R0*0.55, 0, 6.2832); ctx.fill();
+      ctx.fillStyle = `rgba(${LP.paper.join(',')},${0.5*core + 0.12})`;
+      ctx.beginPath(); ctx.arc(HX, HY, 3.2, 0, 6.2832); ctx.fill();
+    }
+    ctx.restore();
+
+    /* ══ 3 主体层 · 离散种子群（先画进发光轨迹层） ══ */
+    trail.blendMode(p.BLEND);
+    trail.noStroke();
+    trail.fill(LP.bgBot[0], LP.bgBot[1], LP.bgBot[2], 30);
+    trail.rect(0, 0, P.W, P.H);
+    trail.blendMode(p.ADD);
+    for (const s of seeds){
+      if (s.dead) continue;
+      s.px = s.x; s.py = s.y;
+      const targ = 1.1 + wind*7.4;
+      s.vx += (targ - s.vx)*0.045;
+      const meander = loopNoise(s.x*0.5, s.y*0.5, a, 0.0021) - 0.5;
+      s.vy += meander*0.55 + Math.sin(a*2 + s.ph)*0.018 - 0.0035;
+      s.vy *= 0.986;
+      s.x += s.vx; s.y += s.vy;
+      s.age++;
+      if (s.x > P.W + 90 || s.y < -90 || s.y > P.H + 90){ s.dead = true; continue; }
+      const fadeIn = Math.min(1, s.age/26);
+      trail.stroke(s.col[0], s.col[1], s.col[2], 66*fadeIn*s.sc);
+      trail.strokeWeight(1.1*s.sc);
+      trail.line(s.px, s.py, s.x, s.y);
+    }
+    trail.blendMode(p.BLEND);
+    p.blendMode(p.ADD);                               // 发光合成：暗底不遮盖下层景物
+    p.image(trail, 0, 0);
+    p.blendMode(p.BLEND);
+
+    // 种子清晰本体（伞盖朝向落后运动方向，带摇摆）
+    ctx.save();
+    for (const s of seeds){
+      if (s.dead) continue;
+      const fadeIn = Math.min(1, s.age/26);
+      const tilt = Math.atan2(s.vy, s.vx)*0.30 - Math.PI/2 + Math.sin(a*2.4 + s.ph)*0.22;
+      drawPappus(ctx, s.x, s.y, tilt, s.sc*(0.85 + 0.15*Math.sin(a*3 + s.ph)),
+                 s.col, 0.42*fadeIn + 0.06);
+    }
+    ctx.restore();
+
+    /* ══ 4 生命层：常驻漂游种子 / 风痕 / 光斑 / 萤火 / 记忆光晕 ══ */
+    ctx.save();                                        // 常驻漂游种子
+    for (const d of drift){
+      d.x += d.sp * (0.55 + wind*2.6);
+      if (d.x > P.W + 40) d.x = -40;
+      const y = d.y + Math.sin(a*d.sp*1.6 + d.ph)*d.amp*(0.5 + wind);
+      const tilt = -Math.PI/2 + 0.35 + Math.sin(a*1.8 + d.ph)*0.2;
+      drawPappus(ctx, d.x, y, tilt, d.sc*(d.far ? 0.7 : 1),
+                 LP.paper, (d.far ? 0.10 : 0.20)*(0.7 + 0.3*Math.sin(a*2 + d.ph)));
+    }
+    ctx.restore();
+
+    if (wind > 0.04){                                  // 风痕流线
+      ctx.save(); ctx.lineCap = 'round';
+      for (const gl of gusts){
+        const prog = (T*gl.sp*3 + gl.off) % 1;
+        const gx = prog * (P.W + 500) - 250;
+        const ga = wind * 0.16 * Math.sin(prog*Math.PI);
+        if (ga < 0.01) continue;
+        ctx.strokeStyle = `rgba(${LP.paper.join(',')},${ga})`;
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(gx - gl.len, gl.y0);
+        ctx.quadraticCurveTo(gx - gl.len*0.5, gl.y0 + gl.bow, gx, gl.y0 + Math.sin(a*3 + gl.off*9)*10);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    ctx.save();                                        // 远景失焦光斑
+    for (const b of bokeh){
+      const bx = ((b.bx + T*b.sp*3) % 1.15 - 0.075)*P.W;
+      const by = b.by*P.H + Math.sin(a*b.sp*9 + b.ph)*22;
+      const al = 0.035 + 0.02*Math.sin(a + b.ph) + wind*0.03;
+      const rg = ctx.createRadialGradient(bx, by, 0, bx, by, b.r);
+      rg.addColorStop(0, `rgba(${b.c.join(',')},${al})`);
+      rg.addColorStop(0.7, `rgba(${b.c.join(',')},${al*0.4})`);
+      rg.addColorStop(1, `rgba(${b.c.join(',')},0)`);
+      ctx.fillStyle = rg;
+      ctx.beginPath(); ctx.arc(bx, by, b.r, 0, 6.2832); ctx.fill();
+    }
+    ctx.restore();
+
+    ctx.save();                                        // 微尘萤火
+    dust.forEach(d => {
+      const x = d.bx*P.W + Math.sin(a*d.sp + d.ph)*d.amp + wind*60*Math.sin(d.ph);
+      const y = d.by*P.H + Math.cos(a*d.sp*0.8 + d.ph*1.7)*d.amp*0.6;
+      const tw = 0.5 + 0.5*Math.sin(a*3*d.sp + d.ph*2.3);
+      ctx.fillStyle = `rgba(${LP.paper.join(',')},${(0.05 + 0.2*tw)*d.tw})`;
+      ctx.beginPath(); ctx.arc(x, y, d.r, 0, 6.2832); ctx.fill();
+    });
+    ctx.restore();
+
+    {                                                  // 记忆光晕（离散峰值）
+      const dB = T - P.bloomAt;
+      const bl = Math.exp(-(dB*dB) / (2*0.055*0.055));
+      if (bl > 0.02){
+        const br2 = 300 + 120*bl;
+        const cg = ctx.createRadialGradient(HX, HY, 0, HX, HY, br2);
+        cg.addColorStop(0, `rgba(${LP.glow.join(',')},${0.20*bl})`);
+        cg.addColorStop(0.55, `rgba(${LP.glow.join(',')},${0.07*bl})`);
+        cg.addColorStop(1, `rgba(${LP.glow.join(',')},0)`);
+        ctx.save(); ctx.fillStyle = cg;
+        ctx.beginPath(); ctx.arc(HX, HY, br2, 0, 6.2832); ctx.fill(); ctx.restore();
+      }
+    }
+
+    /* ══ 5 质感层：颗粒 + 呼吸暗角 ══ */
+    ctx.save(); ctx.globalAlpha = 0.8;
+    ctx.drawImage(grain.elt, -6 + Math.sin(a*0.5)*1.2, -6 + Math.cos(a*0.37)*1.2);
+    ctx.restore();
+    const vg = ctx.createRadialGradient(P.W/2, P.H/2, P.H*0.36, P.W/2, P.H/2, P.W*0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)');
+    vg.addColorStop(1, `rgba(0,0,0,${0.30 + 0.07*(0.5 + 0.5*Math.sin(a + 1.1))})`);
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, P.W, P.H);
+
+    /* ══ 落款：压轴浮现 ══ */
+    if (f > CYCLE * P.textAt){
+      const raw  = (f - CYCLE*P.textAt) / (1.5*FPS);
+      const fade = f > CYCLE*0.94 ? p.map(f, CYCLE*0.94, CYCLE, 1, 0) : 1;
+      const COLX = [P.W*0.845, P.W*0.763], Y0 = P.H*0.135, LH = 54;
+      let order = 0;
+
+      P.poem.forEach((col, ci) => {
+        [...col].forEach((ch, row) => {
+          const d = order * 0.055, e = easeOut(clamp01((raw - d)/0.55));
+          order++;
+          if (e <= 0) return;
+          const u  = clamp01(raw - d);
+          const over = Math.sin(u * Math.PI * 1.6) * 7 * (1 - u);
+          p.push(); p.noStroke(); p.textFont(CN); p.textStyle(p.NORMAL);
+          p.textSize(42); p.textAlign(p.CENTER, p.CENTER);
+          p.fill(LP.text[0], LP.text[1], LP.text[2], 235 * e * fade);
+          p.drawingContext.shadowColor = `rgba(${LP.glow.join(',')},${0.5*e*fade})`;
+          p.drawingContext.shadowBlur = 14;
+          p.text(ch, COLX[ci], Y0 + row*LH + (1 - e)*14 - over);
+          p.drawingContext.shadowBlur = 0;
+          p.pop();
+        });
+      });
+
+      const se = easeOut(clamp01((raw - order*0.055 - 0.16)/0.3));
+      if (se > 0){
+        const sx = COLX[1] - 15, sy = Y0 + P.poem[1].length*LH + 10 - 26*(1 - se);
+        ctx.save();
+        ctx.globalAlpha = 0.88 * se * fade;
+        ctx.fillStyle = `rgb(${LP.seal.join(',')})`;
+        roundRect(ctx, sx, sy, 30, 30, 4);
+        ctx.globalAlpha = se * fade;
+        ctx.fillStyle = 'rgba(250,246,238,0.95)';
+        ctx.font = `300 17px ${CN}`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(P.seal, sx + 15, sy + 16);
+        ctx.restore();
+      }
+
+      const ee = easeOut(clamp01((raw - 0.35)/0.9));
+      if (ee > 0){
+        ctx.save(); ctx.letterSpacing = '0.10em';
+        p.push(); p.noStroke(); p.textFont(EN); p.textStyle(p.ITALIC); p.textSize(21);
+        p.textAlign(p.LEFT, p.BASELINE);
+        p.fill(LP.text[0], LP.text[1], LP.text[2], 128 * ee * fade);
+        p.text(P.subtitleEn, P.W*0.08, P.H*0.875);
+        p.pop(); ctx.restore();
+      }
+    }
+
+    /* —— 首尾落幕淡化：循环点处两帧同色，无缝衔接（亦遮掩绒球复原） —— */
+    const edge = Math.max(clamp01((0.045 - T)/0.045), clamp01((T - 0.955)/0.045));
+    if (edge > 0){
+      ctx.save(); ctx.globalAlpha = edge;
+      ctx.fillStyle = `rgb(${LP.bgBot.join(',')})`; ctx.fillRect(0, 0, P.W, P.H); ctx.restore();
+    }
+  };
+});
+</script>
+</body>
+</html>
